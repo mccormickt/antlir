@@ -52,6 +52,10 @@ def _impl(ctx: AnalysisContext) -> list[Provider]:
         for output_dir in ctx.attrs.output_dirs:
             test_cmd = cmd_args(test_cmd, "--output-dirs", output_dir)
 
+    if ctx.attrs.systemd_credentials:
+        credentials = ["{}={}".format(k, v) for k, v in ctx.attrs.systemd_credentials.items()]
+        test_cmd = cmd_args(test_cmd, cmd_args(credentials, format = "--systemd-credential={}"))
+
     test_cmd = cmd_args(
         test_cmd,
         ctx.attrs.test[ExternalRunnerTestInfo].test_type,
@@ -155,6 +159,15 @@ _vm_test = rule(
             through env $CONSOLE_OUTPUT. This is usually combined with @expect_failure to validate \
             failure scenarios.",
         ),
+        "systemd_credentials": attrs.dict(
+            attrs.string(),
+            # There's no reason why these can't also include passing source
+            # files / build targets, but for now we only really need static
+            # strings, so don't make it overcomplicated
+            attrs.string(),
+            doc = "credential kv pairs to pass to systemd",
+            default = {},
+        ),
         "test": attrs.dep(
             providers = [ExternalRunnerTestInfo],
             doc = "Test target to execute. It's executed inside the VM unless @postmortem is set.",
@@ -216,6 +229,7 @@ def _get_internal_labels(test_rule, run_as_bundle: bool) -> (list[str], list[str
 
 def _implicit_vm_test(
         test_rule,
+        *,
         name: str,
         vm_host: str,
         run_as_bundle: bool = False,
@@ -225,6 +239,7 @@ def _implicit_vm_test(
         postmortem: bool = False,
         labels: list[str] | None = None,
         output_dirs: list[str] | None = None,
+        systemd_credentials: dict[str, str] | None = None,
         _add_outer_labels: list[str] = [],
         _static_list_wrapper: str | None = None,
         **kwargs) -> list[str]:
@@ -277,6 +292,7 @@ def _implicit_vm_test(
         expect_failure = expect_failure,
         postmortem = postmortem,
         output_dirs = output_dirs,
+        systemd_credentials = systemd_credentials or {},
         compatible_with = kwargs.get("compatible_with"),
         _static_list_wrapper = _static_list_wrapper,
         target_compatible_with = kwargs.get("target_compatible_with"),

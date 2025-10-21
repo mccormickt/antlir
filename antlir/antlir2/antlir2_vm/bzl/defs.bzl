@@ -61,6 +61,7 @@ def _machine_json(ctx: AnalysisContext) -> (Artifact, typing.Any):
             "num_nics": ctx.attrs.num_nics,
             "serial_index": ctx.attrs.serial_index,
             "sidecar_services": ctx.attrs.sidecar_services,
+            "systemd_credentials": ctx.attrs.systemd_credentials,
             "use_legacy_share": ctx.attrs.use_legacy_share,
             "use_tpm": ctx.attrs.use_tpm,
         },
@@ -161,6 +162,12 @@ _vm_host = rule(
             attrs.arg(),
             default = [],
             doc = "list of commands to spawn outside VM that VM can communicate with",
+        ),
+        "systemd_credentials": attrs.dict(
+            attrs.string(),
+            attrs.string(),
+            doc = "credential kv pairs to pass to systemd",
+            default = {},
         ),
         "timeout_secs": attrs.option(
             attrs.int(),

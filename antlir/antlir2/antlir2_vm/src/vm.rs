@@ -779,6 +779,25 @@ impl<S: Share> VM<S> {
             .collect(),
         );
         args.extend(self.arch_emulation_args(self.current_arch()));
+
+        for (k, v) in self
+            .args
+            .systemd_credential
+            .iter()
+            .map(|pair| (&pair.key, pair.value.clone()))
+            .chain(
+                self.machine
+                    .systemd_credentials
+                    .iter()
+                    .map(|(k, v)| (k, v.into())),
+            )
+        {
+            args.push("-smbios".into());
+            let mut arg: OsString = format!("type=11,value=io.systemd.credential:{k}=").into();
+            arg.push(v);
+            args.push(arg);
+        }
+
         Ok(args)
     }
 

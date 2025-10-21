@@ -8,6 +8,7 @@
 //! This file contains data structure that mirrors what described in vm bzl files
 //! so that we can directly deserialize a json into Rust structs.
 
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::env;
 use std::ffi::OsStr;
@@ -113,6 +114,9 @@ pub(crate) struct VMArgs {
     /// Dump network traffic on eth0 to output to file. By default it is not dumped.
     #[clap(long)]
     pub(crate) eth0_output_file: Option<PathBuf>,
+    /// Pass credentials to systemd pid1
+    #[arg(long)]
+    pub(crate) systemd_credential: Vec<KvPair>,
     /// Operation for VM to carry out
     #[clap(flatten)]
     pub(crate) mode: VMModeArgs,
@@ -173,6 +177,14 @@ impl VMArgs {
         }
         if self.mode.container {
             args.push("--container".into());
+        }
+        for pair in &self.systemd_credential {
+            args.push("--systemd-credential".into());
+            let mut kv_str = OsString::new();
+            kv_str.push(pair.key.clone());
+            kv_str.push(OsStr::new("="));
+            kv_str.push(pair.value.clone());
+            args.push(kv_str);
         }
         if let Some(command) = &self.mode.command {
             command.iter().for_each(|c| args.push(c.clone()));
@@ -245,6 +257,7 @@ pub(crate) struct MountPlatformDecision(pub(crate) bool);
 
 /// Everything we need to create and run the VM
 #[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct MachineOpts {
     /// ISA of the emulated machine
     pub(crate) arch: CpuIsa,
@@ -271,6 +284,8 @@ pub(crate) struct MachineOpts {
     pub(crate) use_tpm: bool,
     /// Use 9p instead of virtiofs for sharing. This is required for kernel older than 5.4.
     pub(crate) use_legacy_share: bool,
+    /// Credential KV pairs for systemd
+    pub(crate) systemd_credentials: HashMap<String, String>,
 }
 
 #[cfg(test)]
