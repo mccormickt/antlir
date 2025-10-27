@@ -22,6 +22,7 @@ def _impl(ctx: AnalysisContext) -> Promise:
             {"docker_archive": {
                 "build_appliance": build_appliance[BuildApplianceInfo].dir,
                 "oci": oci,
+                "repo_tags": ctx.attrs.repo_tags,
             }},
             with_inputs = True,
         )
@@ -51,7 +52,9 @@ def _impl(ctx: AnalysisContext) -> Promise:
 
 _docker_archive = rule(
     impl = _impl,
-    attrs = oci_attrs | layer_attrs | default_attrs | common_attrs,
+    attrs = {
+        "repo_tags": attrs.list(attrs.string(), default = []),
+    } | oci_attrs | layer_attrs | default_attrs | common_attrs,
     cfg = package_cfg,
 )
 

@@ -24,6 +24,7 @@ use crate::run_cmd;
 pub struct DockerArchive {
     build_appliance: BuildAppliance,
     oci: PathBuf,
+    repo_tags: Vec<String>,
 }
 
 impl DockerArchive {
@@ -50,6 +51,11 @@ impl DockerArchive {
                 .command("skopeo")?
                 .arg("copy")
                 .arg(oci_arg)
+                .args(
+                    self.repo_tags
+                        .iter()
+                        .map(|t| format!("--additional-tag={t}")),
+                )
                 .arg("docker-archive:/__antlir2__/out/docker_archive"),
         )
         .context("Failed to convert to docker-archive")?;
