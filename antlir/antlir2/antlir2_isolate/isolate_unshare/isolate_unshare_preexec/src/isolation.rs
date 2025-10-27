@@ -131,6 +131,7 @@ pub(crate) fn setup_isolation(isol: &IsolationContext) -> Result<()> {
         mount_opts.push(scratch_abspath.join("ephemeral_upper").into_os_string());
         mount_opts.push(",workdir=");
         mount_opts.push(scratch_abspath.join("ephemeral_work").into_os_string());
+        mount_opts.push(",userxattr");
         mount(
             Some("overlay"),
             &newroot.abspath(),
@@ -310,6 +311,7 @@ pub(crate) fn setup_isolation(isol: &IsolationContext) -> Result<()> {
             opts.push(upper.abspath());
             opts.push(",workdir=");
             opts.push(work.abspath());
+            opts.push(",userxattr");
             mount(
                 Some("overlay"),
                 &dst.abspath(),
