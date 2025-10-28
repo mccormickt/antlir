@@ -89,6 +89,7 @@ where
         ];
         let _ = p.read_struct_begin(|_| ())?;
         loop {
+            #[allow(unused_variables)]
             let (_, fty, fid) = p.read_field_begin(|_| (), FIELDS)?;
             if fty == ::fbthrift::TType::Stop {
                 break;
