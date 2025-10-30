@@ -616,7 +616,6 @@ fn run_dnf_driver(
 
     let mut cmd = isol.command(driver_cmd.next().context("driver_cmd is empty")?)?;
     cmd.args(driver_cmd);
-    trace!("dnf driver command: {cmd:#?}");
 
     let mut child = cmd
         .stdin(mfd.into_file())
