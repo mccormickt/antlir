@@ -228,7 +228,7 @@ def _implicit_image_test(
         test_rule,
         name: str,
         layer: str | Select,
-        run_as_user: str | None = None,
+        run_as_user: str | Select | None = None,
         labels: list[str] | Select | None = None,
         boot: bool = False,
         boot_requires_units: [list[str], None] = None,
