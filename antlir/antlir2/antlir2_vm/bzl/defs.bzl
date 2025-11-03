@@ -175,7 +175,12 @@ _vm_host = rule(
             doc = "total allowed execution time for the VM",
         ),
     } | {
-        # VM runtime. Genearlly shouldn't be overwritten
+        # VM runtime. Generally shouldn't be overwritten
+        # TODO: exec_deps really are not safe to propagate to rdeps of this
+        # target, but because vmtest is unique in *requiring* local-only
+        # execution, we can get away with it as long as that local-only
+        # constraint is set on all downstream consumers, causing the exec
+        # platform to resolve the same for every target that uses this
         "image": attrs.exec_dep(
             default = "antlir//antlir/antlir2/antlir2_vm:container-dir",
             doc = "container image directory to execute the VM inside",
@@ -190,7 +195,7 @@ _vm_host = rule(
 )
 
 vm = struct(
-    host = rule_with_default_target_platform(_vm_host),
+    host = rule_with_default_target_platform(_vm_host, local_only_exec = True),
     cpp_test = vm_cpp_test,
     python_test = vm_python_test,
     rust_test = vm_rust_test,

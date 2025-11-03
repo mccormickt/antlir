@@ -5,11 +5,14 @@
 
 load("//antlir/bzl:build_defs.bzl", "config")
 
-def rule_with_default_target_platform(rule_fn):
+def rule_with_default_target_platform(rule_fn, *, local_only_exec: bool = False):
     def _wrapped(**kwargs):
         for k, v in default_target_platform_kwargs().items():
             if k not in kwargs or kwargs[k] == None:
                 kwargs[k] = v
+
+        if local_only_exec:
+            kwargs["exec_compatible_with"] = kwargs.get("exec_compatible_with", []) + ["prelude//platforms:may_run_local"]
         return rule_fn(**kwargs)
 
     return _wrapped

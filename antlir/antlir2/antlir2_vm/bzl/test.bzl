@@ -182,7 +182,7 @@ _vm_test = rule(
     },
 )
 
-vm_test = rule_with_default_target_platform(_vm_test)
+vm_test = rule_with_default_target_platform(_vm_test, local_only_exec = True)
 
 def _get_internal_labels(test_rule, run_as_bundle: bool) -> (list[str], list[str], list[str]):
     """ Returns a set of labels (inner_labels, wrapper_labels, ci_labels)
