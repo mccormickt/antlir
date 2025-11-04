@@ -15,9 +15,12 @@
 #![deny(clippy::expect_used)]
 
 use std::borrow::Cow;
+use std::ffi::OsStr;
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::prelude::PermissionsExt;
 use std::path::Path;
 
+use bytes::Bytes;
 use derive_more::AsRef;
 use derive_more::Deref;
 use derive_more::From;
@@ -52,34 +55,33 @@ pub type Result<R> = std::result::Result<R, Error>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-#[cfg_attr(feature = "serde", serde(bound(deserialize = "'de: 'a")))]
 #[cfg_attr(feature = "serde", serde(untagged))]
-pub enum Command<'a> {
-    Chmod(Chmod<'a>),
-    Chown(Chown<'a>),
-    Clone(Clone<'a>),
+pub enum Command {
+    Chmod(Chmod),
+    Chown(Chown),
+    Clone(Clone),
     End,
-    Link(Link<'a>),
-    Mkdir(Mkdir<'a>),
-    Mkfifo(Mkfifo<'a>),
-    Mkfile(Mkfile<'a>),
-    Mknod(Mknod<'a>),
-    Mksock(Mksock<'a>),
-    RemoveXattr(RemoveXattr<'a>),
-    Rename(Rename<'a>),
-    Rmdir(Rmdir<'a>),
-    SetXattr(SetXattr<'a>),
-    Snapshot(Snapshot<'a>),
-    Subvol(Subvol<'a>),
-    Symlink(Symlink<'a>),
-    Truncate(Truncate<'a>),
-    Unlink(Unlink<'a>),
-    UpdateExtent(UpdateExtent<'a>),
-    Utimes(Utimes<'a>),
-    Write(Write<'a>),
+    Link(Link),
+    Mkdir(Mkdir),
+    Mkfifo(Mkfifo),
+    Mkfile(Mkfile),
+    Mknod(Mknod),
+    Mksock(Mksock),
+    RemoveXattr(RemoveXattr),
+    Rename(Rename),
+    Rmdir(Rmdir),
+    SetXattr(SetXattr),
+    Snapshot(Snapshot),
+    Subvol(Subvol),
+    Symlink(Symlink),
+    Truncate(Truncate),
+    Unlink(Unlink),
+    UpdateExtent(UpdateExtent),
+    Utimes(Utimes),
+    Write(Write),
 }
 
-impl<'a> Command<'a> {
+impl Command {
     /// Exposed for tests to ensure that the demo sendstream is exhaustive and
     /// exercises all commands
     #[cfg(test)]
@@ -113,8 +115,8 @@ impl<'a> Command<'a> {
 
 macro_rules! from_cmd {
     ($t:ident) => {
-        impl<'a> From<$t<'a>> for Command<'a> {
-            fn from(c: $t<'a>) -> Self {
+        impl From<$t> for Command {
+            fn from(c: $t) -> Self {
                 Self::$t(c)
             }
         }
@@ -127,6 +129,11 @@ macro_rules! one_getter {
             self.$f
         }
     };
+    ($f:ident, Path, borrow) => {
+        pub fn $f(&self) -> &Path {
+            self.$f.as_ref()
+        }
+    };
     ($f:ident, $ft:ty, borrow) => {
         pub fn $f(&self) -> &$ft {
             &self.$f
@@ -136,12 +143,38 @@ macro_rules! one_getter {
 
 macro_rules! getters {
     ($t:ident, [$(($f:ident, $ft:ident, $ref:tt)),+]) => {
-        impl<'a> $t<'a> {
+        impl $t {
             $(
                 one_getter!($f, $ft, $ref);
             )+
         }
     };
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", serde(transparent))]
+pub struct BytesPath(Bytes);
+
+impl AsRef<Path> for BytesPath {
+    fn as_ref(&self) -> &Path {
+        Path::new(OsStr::from_bytes(&self.0))
+    }
+}
+
+impl Deref for BytesPath {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
+        self.as_ref()
+    }
+}
+
+impl std::fmt::Debug for BytesPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let path: &Path = self.as_ref();
+        path.fmt(f)
+    }
 }
 
 /// Because the stream is emitted in inode order, not FS order, the destination
@@ -152,20 +185,20 @@ macro_rules! getters {
 #[as_ref(forward)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(transparent))]
-pub struct TemporaryPath<'a>(#[cfg_attr(feature = "serde", serde(borrow))] pub(crate) &'a Path);
+pub struct TemporaryPath(pub(crate) BytesPath);
 
-impl<'a> TemporaryPath<'a> {
+impl TemporaryPath {
     pub fn as_path(&self) -> &Path {
-        self.as_ref()
+        self.0.as_ref()
     }
 }
 
-impl<'a> Deref for TemporaryPath<'a> {
+impl Deref for TemporaryPath {
     type Target = Path;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        self.0
+        self.0.as_ref()
     }
 }
 
@@ -176,9 +209,8 @@ pub struct Ctransid(pub u64);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct Subvol<'a> {
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) path: &'a Path,
+pub struct Subvol {
+    pub(crate) path: BytesPath,
     pub(crate) uuid: Uuid,
     pub(crate) ctransid: Ctransid,
 }
@@ -215,9 +247,8 @@ impl std::fmt::Debug for Mode {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct Chmod<'a> {
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) path: &'a Path,
+pub struct Chmod {
+    pub(crate) path: BytesPath,
     pub(crate) mode: Mode,
 }
 from_cmd!(Chmod);
@@ -225,9 +256,8 @@ getters! {Chmod, [(path, Path, borrow), (mode, Mode, copy)]}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct Chown<'a> {
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) path: &'a Path,
+pub struct Chown {
+    pub(crate) path: BytesPath,
     #[cfg_attr(feature = "serde", serde(with = "crate::ser::uid"))]
     pub(crate) uid: Uid,
     #[cfg_attr(feature = "serde", serde(with = "crate::ser::gid"))]
@@ -249,15 +279,13 @@ impl CloneLen {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct Clone<'a> {
+pub struct Clone {
     pub(crate) src_offset: FileOffset,
     pub(crate) len: CloneLen,
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) src_path: &'a Path,
+    pub(crate) src_path: BytesPath,
     pub(crate) uuid: Uuid,
     pub(crate) ctransid: Ctransid,
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) dst_path: &'a Path,
+    pub(crate) dst_path: BytesPath,
     pub(crate) dst_offset: FileOffset,
 }
 from_cmd!(Clone);
@@ -275,40 +303,37 @@ getters! {Clone, [
 #[as_ref(forward)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(transparent))]
-pub struct LinkTarget<'a>(#[cfg_attr(feature = "serde", serde(borrow))] &'a Path);
+pub struct LinkTarget(BytesPath);
 
-impl<'a> LinkTarget<'a> {
+impl LinkTarget {
     #[inline]
     pub fn as_path(&self) -> &Path {
-        self.0
+        self.0.as_ref()
     }
 }
 
-impl<'a> Deref for LinkTarget<'a> {
+impl Deref for LinkTarget {
     type Target = Path;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        self.0
+        self.0.as_ref()
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct Link<'a> {
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) link_name: &'a Path,
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) target: LinkTarget<'a>,
+pub struct Link {
+    pub(crate) link_name: BytesPath,
+    pub(crate) target: LinkTarget,
 }
 from_cmd!(Link);
-getters! {Link, [(link_name, Path, borrow), (target, LinkTarget, borrow)]}
+getters! {Link, [(link_name, BytesPath, borrow), (target, LinkTarget, borrow)]}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct Mkdir<'a> {
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) path: TemporaryPath<'a>,
+pub struct Mkdir {
+    pub(crate) path: TemporaryPath,
     pub(crate) ino: Ino,
 }
 from_cmd!(Mkdir);
@@ -327,9 +352,8 @@ impl Rdev {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct Mkspecial<'a> {
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) path: TemporaryPath<'a>,
+pub struct Mkspecial {
+    pub(crate) path: TemporaryPath,
     pub(crate) ino: Ino,
     pub(crate) rdev: Rdev,
     pub(crate) mode: Mode,
@@ -347,7 +371,7 @@ macro_rules! special {
         #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
         #[cfg_attr(feature = "serde", serde(transparent))]
         #[repr(transparent)]
-        pub struct $t<'a>(#[cfg_attr(feature = "serde", serde(borrow))] Mkspecial<'a>);
+        pub struct $t(Mkspecial);
         from_cmd!($t);
     };
 }
@@ -357,9 +381,8 @@ special!(Mksock);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct Mkfile<'a> {
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) path: TemporaryPath<'a>,
+pub struct Mkfile {
+    pub(crate) path: TemporaryPath,
     pub(crate) ino: Ino,
 }
 from_cmd!(Mkfile);
@@ -367,42 +390,36 @@ getters! {Mkfile, [(path, TemporaryPath, borrow), (ino, Ino, copy)]}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct RemoveXattr<'a> {
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) path: &'a Path,
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) name: XattrName<'a>,
+pub struct RemoveXattr {
+    pub(crate) path: BytesPath,
+    pub(crate) name: XattrName,
 }
 from_cmd!(RemoveXattr);
 getters! {RemoveXattr, [(path, Path, borrow), (name, XattrName, borrow)]}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct Rename<'a> {
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) from: &'a Path,
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) to: &'a Path,
+pub struct Rename {
+    pub(crate) from: BytesPath,
+    pub(crate) to: BytesPath,
 }
 from_cmd!(Rename);
 getters! {Rename, [(from, Path, borrow), (to, Path, borrow)]}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct Rmdir<'a> {
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) path: &'a Path,
+pub struct Rmdir {
+    pub(crate) path: BytesPath,
 }
 from_cmd!(Rmdir);
 getters! {Rmdir, [(path, Path, borrow)]}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct Symlink<'a> {
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) link_name: &'a Path,
+pub struct Symlink {
+    pub(crate) link_name: BytesPath,
     pub(crate) ino: Ino,
-    pub(crate) target: LinkTarget<'a>,
+    pub(crate) target: LinkTarget,
 }
 from_cmd!(Symlink);
 getters! {Symlink, [(link_name, Path, borrow), (ino, Ino, copy), (target, LinkTarget, borrow)]}
@@ -410,61 +427,59 @@ getters! {Symlink, [(link_name, Path, borrow), (ino, Ino, copy), (target, LinkTa
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, AsRef, From)]
 #[as_ref(forward)]
 #[from(forward)]
-pub struct XattrName<'a>(&'a [u8]);
+pub struct XattrName(Bytes);
 
-impl<'a> XattrName<'a> {
+impl XattrName {
     #[inline]
     pub fn as_slice(&self) -> &[u8] {
-        self.0
+        &self.0
     }
 }
 
-impl<'a> Deref for XattrName<'a> {
+impl Deref for XattrName {
     type Target = [u8];
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        self.0
+        self.as_slice()
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, AsRef, From)]
 #[as_ref(forward)]
 #[from(forward)]
-pub struct XattrData<'a>(&'a [u8]);
+pub struct XattrData(Bytes);
 
-impl<'a> XattrData<'a> {
+impl XattrData {
     #[inline]
     pub fn as_slice(&self) -> &[u8] {
-        self.0
+        &self.0
     }
 }
 
-impl<'a> Deref for XattrData<'a> {
+impl Deref for XattrData {
     type Target = [u8];
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        self.0
+        self.as_slice()
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct SetXattr<'a> {
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) path: &'a Path,
-    pub(crate) name: XattrName<'a>,
-    pub(crate) data: XattrData<'a>,
+pub struct SetXattr {
+    pub(crate) path: BytesPath,
+    pub(crate) name: XattrName,
+    pub(crate) data: XattrData,
 }
 from_cmd!(SetXattr);
 getters! {SetXattr, [(path, Path, borrow), (name, XattrName, borrow), (data, XattrData, borrow)]}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct Snapshot<'a> {
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) path: &'a Path,
+pub struct Snapshot {
+    pub(crate) path: BytesPath,
     pub(crate) uuid: Uuid,
     pub(crate) ctransid: Ctransid,
     pub(crate) clone_uuid: Uuid,
@@ -481,9 +496,8 @@ getters! {Snapshot, [
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct Truncate<'a> {
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) path: &'a Path,
+pub struct Truncate {
+    pub(crate) path: BytesPath,
     pub(crate) size: u64,
 }
 from_cmd!(Truncate);
@@ -491,9 +505,8 @@ getters! {Truncate, [(path, Path, borrow), (size, u64, copy)]}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct Unlink<'a> {
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) path: &'a Path,
+pub struct Unlink {
+    pub(crate) path: BytesPath,
 }
 from_cmd!(Unlink);
 getters! {Unlink, [(path, Path, borrow)]}
@@ -501,9 +514,8 @@ getters! {Unlink, [(path, Path, borrow)]}
 #[allow(clippy::len_without_is_empty)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct UpdateExtent<'a> {
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) path: &'a Path,
+pub struct UpdateExtent {
+    pub(crate) path: BytesPath,
     pub(crate) offset: FileOffset,
     pub(crate) len: u64,
 }
@@ -527,9 +539,8 @@ time_alias!(Mtime);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct Utimes<'a> {
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) path: &'a Path,
+pub struct Utimes {
+    pub(crate) path: BytesPath,
     pub(crate) atime: Atime,
     pub(crate) mtime: Mtime,
     pub(crate) ctime: Ctime,
@@ -555,29 +566,29 @@ impl FileOffset {
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, AsRef, From)]
 #[as_ref(forward)]
-pub struct Data<'a>(&'a [u8]);
+pub struct Data(Bytes);
 
-impl<'a> Data<'a> {
+impl Data {
     #[inline]
     pub fn as_slice(&self) -> &[u8] {
-        self.0
+        &self.0
     }
 }
 
-impl<'a> Deref for Data<'a> {
+impl Deref for Data {
     type Target = [u8];
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        self.0
+        self.as_slice()
     }
 }
 
-impl<'a> std::fmt::Debug for Data<'a> {
+impl std::fmt::Debug for Data {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match std::str::from_utf8(self.0) {
+        let s = match std::str::from_utf8(&self.0) {
             Ok(s) => Cow::Borrowed(s),
-            Err(_) => Cow::Owned(hex::encode(self.0)),
+            Err(_) => Cow::Owned(hex::encode(&self.0)),
         };
         if s.len() <= 128 {
             write!(f, "{s:?}")
@@ -595,11 +606,10 @@ impl<'a> std::fmt::Debug for Data<'a> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct Write<'a> {
-    #[cfg_attr(feature = "serde", serde(borrow))]
-    pub(crate) path: &'a Path,
+pub struct Write {
+    pub(crate) path: BytesPath,
     pub(crate) offset: FileOffset,
-    pub(crate) data: Data<'a>,
+    pub(crate) data: Data,
 }
 from_cmd!(Write);
 getters! {Write, [(path, Path, borrow), (offset, FileOffset, copy), (data, Data, borrow)]}
@@ -615,7 +625,7 @@ mod tests {
 
     use super::*;
 
-    fn serialize_cmd<'a>(idx: &mut u64, out: &mut String, cmd: &Command<'a>) {
+    fn serialize_cmd(idx: &mut u64, out: &mut String, cmd: &Command) {
         match cmd {
             Command::Subvol(_) | Command::Snapshot(_) => {
                 writeln!(out, "BEGIN SENDSTREAM {idx}").expect("while writing");

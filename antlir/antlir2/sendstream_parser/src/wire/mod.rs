@@ -5,17 +5,18 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+use bytes::BytesMut;
 use nom::IResult;
 use nom::Parser as _;
+use tokio::io::AsyncRead;
+use tokio::io::AsyncReadExt;
 
 static MAGIC_HEADER: &[u8] = b"btrfs-stream\0";
 
 pub(crate) mod cmd;
+mod nombytes;
 mod tlv;
-
-use bytes::BytesMut;
-use tokio::io::AsyncRead;
-use tokio::io::AsyncReadExt;
+pub use nombytes::NomBytes;
 
 #[derive(Debug)]
 pub enum ParserControl {
@@ -48,7 +49,7 @@ fn parse_header<'a>(input: &'a [u8]) -> IResult<&'a [u8], u32> {
 pub async fn parse<R, F>(mut reader: R, mut f: F) -> crate::Result<u128>
 where
     R: AsyncRead + Unpin + Send,
-    F: FnMut(&crate::Command<'_>) -> ParserControl + Send,
+    F: FnMut(&crate::Command) -> ParserControl + Send,
 {
     let mut unparsed = BytesMut::with_capacity(1000);
     let mut command_count = 0;
@@ -57,7 +58,7 @@ where
         let bytes_read = reader.read_buf(&mut unparsed).await?;
         if bytes_read != 0 || !unparsed.is_empty() {
             while header.is_some() {
-                match crate::Command::parse(&unparsed) {
+                match crate::Command::parse(unparsed.clone().into()) {
                     Ok((remainder, command)) => {
                         command_count += 1;
                         if let ParserControl::Enough = f(&command) {

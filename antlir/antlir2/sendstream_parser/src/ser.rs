@@ -55,6 +55,7 @@ pub(crate) mod gid {
 }
 
 pub(crate) mod utf8 {
+    use bytes::Bytes;
     use serde::ser::Error;
 
     use super::*;
@@ -62,9 +63,11 @@ pub(crate) mod utf8 {
     pub fn deserialize<'de, D, T>(d: D) -> Result<T, D::Error>
     where
         D: Deserializer<'de>,
-        T: From<&'de [u8]>,
+        T: From<Bytes>,
     {
-        <&str>::deserialize(d).map(|s| s.as_bytes()).map(T::from)
+        <&str>::deserialize(d)
+            .map(|s| Bytes::copy_from_slice(s.as_bytes()))
+            .map(T::from)
     }
 
     pub fn serialize<S, T>(t: T, s: S) -> Result<S::Ok, S::Error>
@@ -80,10 +83,7 @@ pub(crate) mod utf8 {
 
 macro_rules! utf8_serde {
     ($t:ident) => {
-        impl<'a, 'de> Deserialize<'de> for $t<'a>
-        where
-            'de: 'a,
-        {
+        impl<'de> Deserialize<'de> for $t {
             fn deserialize<D>(d: D) -> Result<Self, D::Error>
             where
                 D: Deserializer<'de>,
@@ -92,7 +92,7 @@ macro_rules! utf8_serde {
             }
         }
 
-        impl<'a> Serialize for $t<'a> {
+        impl Serialize for $t {
             fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
             where
                 S: Serializer,

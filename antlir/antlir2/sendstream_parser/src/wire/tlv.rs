@@ -5,9 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-use std::ffi::OsStr;
-use std::os::unix::ffi::OsStrExt;
-use std::path::Path;
 use std::time::Duration;
 use std::time::SystemTime;
 
@@ -17,22 +14,23 @@ use nom::IResult;
 use nom::Parser as _;
 use uuid::Uuid;
 
+use crate::BytesPath;
+use crate::wire::NomBytes;
+
 /// Parse the TLV with the output type's primary attribute tag
-pub(crate) fn parse_tlv<'i, T, const L: usize, Attr>(input: &'i [u8]) -> IResult<&'i [u8], T>
+pub(crate) fn parse_tlv<T, const L: usize, Attr>(input: NomBytes) -> IResult<NomBytes, T>
 where
-    T: Tlv<'i, L, Attr = Attr>,
+    T: Tlv<L, Attr = Attr>,
     Attr: AttrTypeParam,
 {
-    parse_tlv_with_attr::<'i, T, L, T::Attr>(input)
+    parse_tlv_with_attr::<T, L, T::Attr>(input)
 }
 
 /// Parse the TLV with an explicit attribute tag. This allows for parsing
 /// identical data types from the different Attrs.
-pub(crate) fn parse_tlv_with_attr<'i, T, const L: usize, Attr>(
-    input: &'i [u8],
-) -> IResult<&'i [u8], T>
+pub(crate) fn parse_tlv_with_attr<T, const L: usize, Attr>(input: NomBytes) -> IResult<NomBytes, T>
 where
-    T: Tlv<'i, L>,
+    T: Tlv<L>,
     // Ensure that T can be parsed from this attribute
     T: ParsesFromAttr<Attr>,
     Attr: AttrTypeParam,
@@ -63,12 +61,12 @@ where
 /// Type-length-value struct. If L is not 0, the parser will automatically
 /// ensure that the data is exactly L bytes long, and will call parse_exact
 /// instead of parse.
-pub(crate) trait Tlv<'i, const L: usize>: ParsesFromAttr<Self::Attr> {
+pub(crate) trait Tlv<const L: usize>: ParsesFromAttr<Self::Attr> {
     /// Default attribute when calling parse_tlv
     type Attr: AttrTypeParam;
 
     /// Parse the data into whatever the inner type is
-    fn parse(_data: &'i [u8]) -> Self
+    fn parse(_data: NomBytes) -> Self
     where
         Self: Sized,
     {
@@ -90,24 +88,24 @@ where
 }
 
 macro_rules! tlv_impl {
-    ($lt: lifetime, $ty: ty, $default_attr: ident, $parse: expr) => {
-        impl<$lt> Tlv<$lt, 0> for $ty {
+    ($ty: ty, $default_attr: ident, $parse: expr) => {
+        impl Tlv<0> for $ty {
             type Attr = attr_types::$default_attr;
 
-            fn parse(data: &$lt [u8]) -> Self {
+            fn parse(data: NomBytes) -> Self {
                 #[allow(clippy::redundant_closure_call)]
                 $parse(data)
             }
         }
 
-        impl<$lt> ParsesFromAttr<attr_types::$default_attr> for $ty {}
+        impl ParsesFromAttr<attr_types::$default_attr> for $ty {}
     };
-    ($lt: lifetime, $ty: ty, $default_attr: ident, $parse:expr, $($attr:ident),+) => {
-        tlv_impl!($lt, $ty, $default_attr, $parse);
-        $(impl<$lt> ParsesFromAttr<attr_types::$attr> for $ty {})+
+    ($ty: ty, $default_attr: ident, $parse:expr, $($attr:ident),+) => {
+        tlv_impl!($ty, $default_attr, $parse);
+        $(impl ParsesFromAttr<attr_types::$attr> for $ty {})+
     };
     ($ty: ty, $len: literal, $default_attr: ident, $parse: expr) => {
-        impl<'i> Tlv<'i, $len> for $ty {
+        impl Tlv<$len> for $ty {
             type Attr = attr_types::$default_attr;
 
             fn parse_exact(data: [u8; $len]) -> Self {
@@ -125,19 +123,17 @@ macro_rules! tlv_impl {
 }
 
 tlv_impl!(
-    'i,
-    &'i Path,
+    BytesPath,
     Path,
-    |data: &'i [u8]| -> &'i Path { Path::new(OsStr::from_bytes(data)) },
+    |data: NomBytes| -> BytesPath { BytesPath(data.into()) },
     PathTo,
     ClonePath
 );
 
 tlv_impl!(
-    'i,
-    crate::TemporaryPath<'i>,
+    crate::TemporaryPath,
     Path,
-    |data: &'i [u8]| -> crate::TemporaryPath<'i> { crate::TemporaryPath(Path::new(OsStr::from_bytes(data))) }
+    |data: NomBytes| -> crate::TemporaryPath { crate::TemporaryPath(BytesPath(data.into())) }
 );
 
 tlv_impl!(
@@ -173,21 +169,15 @@ tlv_impl!(crate::Ino, 8, Ino, |data: [u8; 8]| -> crate::Ino {
 });
 
 tlv_impl!(
-    'i,
-    crate::XattrName<'i>,
+    crate::XattrName,
     XattrName,
-    |data: &'i [u8]| -> crate::XattrName<'i> {
-        crate::XattrName(data)
-    }
+    |data: NomBytes| -> crate::XattrName { crate::XattrName(data.into()) }
 );
 
 tlv_impl!(
-    'i,
-    crate::XattrData<'i>,
+    crate::XattrData,
     XattrData,
-    |data: &'i [u8]| -> crate::XattrData<'i> {
-        crate::XattrData(data)
-    }
+    |data: NomBytes| -> crate::XattrData { crate::XattrData(data.into()) }
 );
 
 tlv_impl!(
@@ -198,22 +188,14 @@ tlv_impl!(
     CloneOffset
 );
 
-tlv_impl!(
-    'i,
-    crate::Data<'i>,
-    Data,
-    |data: &'i [u8]| -> crate::Data<'i> {
-        crate::Data(data)
-    }
-);
+tlv_impl!(crate::Data, Data, |data: NomBytes| -> crate::Data {
+    crate::Data(data.into())
+});
 
 tlv_impl!(
-    'i,
-    crate::LinkTarget<'i>,
+    crate::LinkTarget,
     Link,
-    |data: &'i [u8]| -> crate::LinkTarget<'i> {
-        crate::LinkTarget(Path::new(OsStr::from_bytes(data)))
-    }
+    |data: NomBytes| -> crate::LinkTarget { crate::LinkTarget(BytesPath(data.into())) }
 );
 
 tlv_impl!(crate::Rdev, 8, Rdev, |data: [u8; 8]| -> crate::Rdev {

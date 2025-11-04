@@ -8,6 +8,7 @@
 use nom::IResult;
 use nom::Parser as _;
 
+use super::NomBytes;
 use crate::wire::tlv::attr_types;
 use crate::wire::tlv::parse_tlv;
 use crate::wire::tlv::parse_tlv_with_attr;
@@ -23,7 +24,7 @@ pub(crate) struct CommandHeader {
 }
 
 impl CommandHeader {
-    pub(crate) fn parse(input: &[u8]) -> IResult<&[u8], Self> {
+    pub(crate) fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, len) = nom::number::streaming::le_u32(input)?;
         let (input, ty) = CommandType::parse(input)?;
         let (input, crc32) = nom::number::streaming::le_u32(input)?;
@@ -102,7 +103,7 @@ command_type!(
 );
 
 impl CommandType {
-    fn parse(input: &[u8]) -> IResult<&[u8], Self> {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, ty) = nom::number::streaming::le_u16(input)?;
         Ok((input, Self::from_u16(ty)))
     }
@@ -123,8 +124,8 @@ macro_rules! parse_subtypes {
     }
 }
 
-impl<'a> crate::Command<'a> {
-    pub(crate) fn parse(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+impl crate::Command {
+    pub(crate) fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, hdr) = CommandHeader::parse(input)?;
         let (input, cmd_data) = nom::bytes::streaming::take(hdr.len).parse(input)?;
         let (cmd_remaining, cmd): (_, crate::Command) = parse_subtypes!(
@@ -158,8 +159,8 @@ impl<'a> crate::Command<'a> {
     }
 }
 
-impl<'a> crate::Subvol<'a> {
-    fn parse(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+impl crate::Subvol {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, uuid) = parse_tlv(input)?;
         let (input, ctransid) = parse_tlv(input)?;
@@ -174,16 +175,16 @@ impl<'a> crate::Subvol<'a> {
     }
 }
 
-impl<'a> crate::Chmod<'a> {
-    fn parse(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+impl crate::Chmod {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, mode) = parse_tlv(input)?;
         Ok((input, Self { path, mode }))
     }
 }
 
-impl<'a> crate::Chown<'a> {
-    fn parse(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+impl crate::Chown {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, uid) = parse_tlv(input)?;
         let (input, gid) = parse_tlv(input)?;
@@ -191,8 +192,8 @@ impl<'a> crate::Chown<'a> {
     }
 }
 
-impl<'a> crate::Clone<'a> {
-    fn parse(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+impl crate::Clone {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, dst_offset) = parse_tlv(input)?;
         let (input, len) = parse_tlv(input)?;
         let (input, dst_path) = parse_tlv(input)?;
@@ -215,16 +216,16 @@ impl<'a> crate::Clone<'a> {
     }
 }
 
-impl<'a> crate::Link<'a> {
-    fn parse(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+impl crate::Link {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, link_name) = parse_tlv(input)?;
         let (input, target) = parse_tlv(input)?;
         Ok((input, Self { target, link_name }))
     }
 }
 
-impl<'a> crate::Symlink<'a> {
-    fn parse(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+impl crate::Symlink {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, link_name) = parse_tlv(input)?;
         let (input, ino) = parse_tlv(input)?;
         let (input, target) = parse_tlv(input)?;
@@ -239,24 +240,24 @@ impl<'a> crate::Symlink<'a> {
     }
 }
 
-impl<'a> crate::Mkdir<'a> {
-    fn parse(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+impl crate::Mkdir {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, ino) = parse_tlv(input)?;
         Ok((input, Self { path, ino }))
     }
 }
 
-impl<'a> crate::Mkfile<'a> {
-    fn parse(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+impl crate::Mkfile {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, ino) = parse_tlv(input)?;
         Ok((input, Self { path, ino }))
     }
 }
 
-impl<'a> crate::Mkspecial<'a> {
-    fn parse(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+impl crate::Mkspecial {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, ino) = parse_tlv(input)?;
         let (input, rdev) = parse_tlv(input)?;
@@ -275,8 +276,8 @@ impl<'a> crate::Mkspecial<'a> {
 
 macro_rules! mkspecial {
     ($t:ident) => {
-        impl<'a> crate::$t<'a> {
-            fn parse(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+        impl crate::$t {
+            fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
                 crate::Mkspecial::parse(input).map(|(r, s)| (r, Self(s)))
             }
         }
@@ -287,31 +288,31 @@ mkspecial!(Mknod);
 mkspecial!(Mkfifo);
 mkspecial!(Mksock);
 
-impl<'a> crate::RemoveXattr<'a> {
-    fn parse(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+impl crate::RemoveXattr {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, name) = parse_tlv(input)?;
         Ok((input, Self { path, name }))
     }
 }
 
-impl<'a> crate::Rename<'a> {
-    fn parse(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+impl crate::Rename {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, from) = parse_tlv(input)?;
         let (input, to) = parse_tlv_with_attr::<_, 0, attr_types::PathTo>(input)?;
         Ok((input, Self { from, to }))
     }
 }
 
-impl<'a> crate::Rmdir<'a> {
-    fn parse(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+impl crate::Rmdir {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         Ok((input, Self { path }))
     }
 }
 
-impl<'a> crate::SetXattr<'a> {
-    fn parse(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+impl crate::SetXattr {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, name) = parse_tlv(input)?;
         let (input, data) = parse_tlv(input)?;
@@ -319,16 +320,16 @@ impl<'a> crate::SetXattr<'a> {
     }
 }
 
-impl<'a> crate::Truncate<'a> {
-    fn parse(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+impl crate::Truncate {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, size) = parse_tlv(input)?;
         Ok((input, Self { path, size }))
     }
 }
 
-impl<'a> crate::Snapshot<'a> {
-    fn parse(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+impl crate::Snapshot {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, uuid) = parse_tlv(input)?;
         let (input, ctransid) = parse_tlv(input)?;
@@ -348,15 +349,15 @@ impl<'a> crate::Snapshot<'a> {
     }
 }
 
-impl<'a> crate::Unlink<'a> {
-    fn parse(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+impl crate::Unlink {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         Ok((input, Self { path }))
     }
 }
 
-impl<'a> crate::UpdateExtent<'a> {
-    fn parse(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+impl crate::UpdateExtent {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, offset) = parse_tlv(input)?;
         let (input, len) = parse_tlv(input)?;
@@ -364,8 +365,8 @@ impl<'a> crate::UpdateExtent<'a> {
     }
 }
 
-impl<'a> crate::Utimes<'a> {
-    fn parse(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+impl crate::Utimes {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, atime) = parse_tlv(input)?;
         let (input, mtime) = parse_tlv(input)?;
@@ -382,8 +383,8 @@ impl<'a> crate::Utimes<'a> {
     }
 }
 
-impl<'a> crate::Write<'a> {
-    fn parse(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+impl crate::Write {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, offset) = parse_tlv(input)?;
         let (input, data) = parse_tlv(input)?;
