@@ -5,6 +5,7 @@ oncall("antlir")
 rust_library(
     name = "signedsource",
     srcs = glob(["src/**/*.rs"]),
+    visibility = ["PUBLIC"],
     deps = [
         "md-5",
         "thiserror",
