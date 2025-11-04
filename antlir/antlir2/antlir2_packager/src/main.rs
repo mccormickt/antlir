@@ -19,7 +19,7 @@ mod btrfs;
 mod cpio;
 mod docker_archive;
 mod erofs;
-mod ext;
+mod ext3;
 mod gpt;
 mod oci;
 mod rpm;
