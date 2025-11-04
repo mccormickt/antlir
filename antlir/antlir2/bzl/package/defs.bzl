@@ -415,6 +415,26 @@ _ext3, _ext3_anon = _new_package_rule(
 )
 
 # @unused
+_ext4, _ext4_anon = _new_package_rule(
+    format = "ext4",
+    rule_attrs = {
+        "free_mb": attrs.int(
+            default = 0,
+            doc = "include at least this much free space in the image",
+        ),
+        "label": attrs.option(attrs.string(), default = None),
+        "size_mb": attrs.option(
+            attrs.int(),
+            default = None,
+            doc = "absolute size of the image",
+        ),
+    },
+    can_be_partition = True,
+    sudo = True,
+    uses_build_appliance = True,
+)
+
+# @unused
 _unprivileged_dir, _unprivileged_dir_anon = _new_package_rule(
     format = "unprivileged_dir",
     is_dir = True,
@@ -440,6 +460,7 @@ package = struct(
     cpio_zst = package_macro(_cpio_zst),
     erofs = package_macro(_erofs),
     ext3 = package_macro(_ext3),
+    ext4 = package_macro(_ext4),
     gpt = gpt,
     rpm = package_macro(_rpm, always_rootless = True),
     sendstream_v2 = sendstream_v2,

@@ -1,0 +1,58 @@
+load("//antlir/antlir2/bzl/feature:defs.bzl", "feature")
+load("//antlir/antlir2/bzl/image:defs.bzl", "image")
+load("//antlir/antlir2/bzl/package:defs.bzl", "package")
+load("//antlir/antlir2/test_images/package:defs.bzl", "test_in_layer")
+load("//antlir/bzl:build_defs.bzl", "python_unittest")
+
+oncall("antlir")
+
+package.ext4(
+    name = "default.ext4",
+    layer = "//antlir/antlir2/test_images/package:standard",
+)
+
+package.ext4(
+    name = "size_mb.ext4",
+    layer = "//antlir/antlir2/test_images/package:standard",
+    size_mb = 1024,
+)
+
+package.ext4(
+    name = "free_mb.ext4",
+    free_mb = 256,
+    layer = "//antlir/antlir2/test_images/package:standard",
+)
+
+image.layer(
+    name = "empty",
+    features = [],
+)
+
+package.ext4(
+    name = "empty.ext4",
+    layer = ":empty",
+)
+
+python_unittest(
+    name = "test-sizing",
+    srcs = ["test_sizing.py"],
+    resources = {
+        ":default.ext4": "default.ext4",
+        ":empty.ext4": "empty.ext4",
+        ":free_mb.ext4": "free_mb.ext4",
+        ":size_mb.ext4": "size_mb.ext4",
+    },
+)
+
+test_in_layer(
+    name = "test-ext4",
+    layer_features = [
+        feature.ensure_dirs_exist(dirs = "/package"),
+        feature.install(
+            src = ":default.ext4",
+            dst = "/package.ext4",
+        ),
+        feature.rpms_install(rpms = ["e2fsprogs"]),
+    ],
+    stub = "stub.rs",
+)

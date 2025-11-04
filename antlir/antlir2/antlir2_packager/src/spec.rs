@@ -15,6 +15,7 @@ pub enum Spec {
     DockerArchive(crate::docker_archive::DockerArchive),
     Erofs(crate::erofs::Erofs),
     Ext3(crate::ext3::Ext3),
+    Ext4(crate::ext4::Ext4),
     Gpt(crate::gpt::Gpt),
     Oci(crate::oci::Oci),
     Rpm(crate::rpm::Rpm),

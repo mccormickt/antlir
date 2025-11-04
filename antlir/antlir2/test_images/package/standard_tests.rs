@@ -265,7 +265,7 @@ fn no_unexpected_files() {
         expected_files.insert(".meta".into());
         expected_files.insert(".meta/target".into());
     }
-    #[cfg(feature = "format_ext3")]
+    #[cfg(any(feature = "format_ext3", feature = "format_ext4"))]
     expected_files.insert("lost+found".into());
 
     assert_eq!(expected_files, all_files);

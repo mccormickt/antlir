@@ -20,6 +20,7 @@ mod cpio;
 mod docker_archive;
 mod erofs;
 mod ext3;
+mod ext4;
 mod gpt;
 mod oci;
 mod rpm;
@@ -106,6 +107,7 @@ fn main() -> Result<()> {
         Spec::DockerArchive(p) => p.build(&args.out),
         Spec::Erofs(p) => p.build(&args.out, layer.context("layer required for this format")?),
         Spec::Ext3(p) => p.build(&args.out, layer.context("layer required for this format")?),
+        Spec::Ext4(p) => p.build(&args.out, layer.context("layer required for this format")?),
         Spec::Gpt(p) => p.build(&args.out),
         Spec::Oci(p) => p.build(&args.out),
         Spec::Rpm(p) => p.build(&args.out, layer.context("layer required for this format")?),
