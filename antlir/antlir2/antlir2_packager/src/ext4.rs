@@ -58,6 +58,11 @@ impl PackageFormat for Ext4 {
         }
         cmd.arg("-d").arg("/__antlir2__/root");
         cmd.arg(MAPPED_OUTPUT);
+        cmd.arg("-O");
+        // Features derived from https://linux.die.net/man/8/mkfs.ext4
+        cmd.arg("dir_index,extent,large_file,sparse_super,uninit_bg");
+        cmd.arg("-E");
+        cmd.arg("discard,lazy_itable_init=1,lazy_journal_init=1");
         if let Some(size_mb) = self.size_mb {
             cmd.arg(format!("{}M", size_mb));
             run_cmd(&mut cmd).context("failed to build ext4 archive")?;
