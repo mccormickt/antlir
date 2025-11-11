@@ -5,12 +5,15 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+use bytes::Bytes;
 use nom::IResult;
 use nom::Parser as _;
 
 use super::NomBytes;
+use crate::wire::tlv::Attr;
 use crate::wire::tlv::attr_types;
 use crate::wire::tlv::parse_tlv;
+use crate::wire::tlv::parse_tlv_opt;
 use crate::wire::tlv::parse_tlv_with_attr;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,68 +42,56 @@ impl CommandHeader {
     }
 }
 
-macro_rules! command_type {
-    ($enm: ident, $($v:ident),+) => {
-        /// All of the btrfs sendstream commands. Copied from linux/fs/btrfs/send.h
-        /// WARNING: order is important!
-        #[derive(
-            Debug,
-            Copy,
-            Clone,
-            PartialEq,
-            Eq,
-            PartialOrd,
-            Ord,
-        )]
-        pub(crate) enum $enm {
-            $($v,)+
-            /// Unknown command, maybe it's new?
-            Unknown(u16),
-        }
-
-        impl $enm {
-            const fn from_u16(u: u16) -> Self {
-                match u {
-                    $(${index()} => Self::$v,)+
-                    _ => Self::Unknown(u),
-                }
-            }
-
-            #[cfg(test)]
-            pub(crate) fn iter() -> impl Iterator<Item = Self> {
-                [$(Self::$v,)+].into_iter()
-            }
-        }
-    }
+/// All of the btrfs sendstream commands. Copied from linux/fs/btrfs/send.h
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    num_enum::FromPrimitive
+)]
+#[cfg_attr(feature = "serde", derive(::serde::Deserialize, ::serde::Serialize))]
+#[repr(u16)]
+pub(crate) enum CommandType {
+    Unspecified = 0,
+    Subvol = 1,
+    Snapshot = 2,
+    Mkfile = 3,
+    Mkdir = 4,
+    Mknod = 5,
+    Mkfifo = 6,
+    Mksock = 7,
+    Symlink = 8,
+    Rename = 9,
+    Link = 10,
+    Unlink = 11,
+    Rmdir = 12,
+    SetXattr = 13,
+    RemoveXattr = 14,
+    Write = 15,
+    Clone = 16,
+    Truncate = 17,
+    Chmod = 18,
+    Chown = 19,
+    Utimes = 20,
+    End = 21,
+    UpdateExtent = 22,
+    Fallocate = 23,
+    Fileattr = 24,
+    EncodedWrite = 25,
+    EnableVerity = 26,
+    #[num_enum(catch_all)]
+    Unknown(u16),
 }
 
-command_type!(
-    CommandType,
-    // variants below
-    Unspecified,
-    Subvol,
-    Snapshot,
-    Mkfile,
-    Mkdir,
-    Mknod,
-    Mkfifo,
-    Mksock,
-    Symlink,
-    Rename,
-    Link,
-    Unlink,
-    Rmdir,
-    SetXattr,
-    RemoveXattr,
-    Write,
-    Clone,
-    Truncate,
-    Chmod,
-    Chown,
-    Utimes,
-    End,
-    UpdateExtent
-);
+impl CommandType {
+    fn from_u16(u: u16) -> Self {
+        <Self as num_enum::FromPrimitive>::from_primitive(u)
+    }
+}
 
 impl CommandType {
     fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
@@ -109,57 +100,107 @@ impl CommandType {
     }
 }
 
-macro_rules! parse_subtypes {
-    ($hdr: expr, $cmd_data:expr, $($t:ident),+) => {
-        match $hdr.ty {
-            $(CommandType::$t => {
-                let (remaining, cmd) = crate::$t::parse($cmd_data)?;
-                Ok((remaining, cmd.into()))
-            }),+
-            CommandType::End => Ok(($cmd_data, crate::Command::End)),
-            _ => {
-                unreachable!("all btrfs sendstream command types are covered, what is this? {:?}", $hdr)
-            }
-        }
+trait ParseCommand: Sized {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self>;
+}
+
+trait ParseCommandVersion: Sized {
+    fn parse(input: NomBytes, sendstream_version: u32) -> IResult<NomBytes, Self>;
+}
+
+impl<T> ParseCommandVersion for T
+where
+    T: ParseCommand,
+{
+    fn parse(input: NomBytes, _sendstream_version: u32) -> IResult<NomBytes, Self> {
+        <T as ParseCommand>::parse(input)
     }
 }
 
 impl crate::Command {
-    pub(crate) fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
+    pub(crate) fn parser(
+        sendstream_version: u32,
+    ) -> impl nom::Parser<NomBytes, Output = Self, Error = nom::error::Error<NomBytes>> {
+        move |input: NomBytes| -> IResult<NomBytes, Self> {
+            let (input, cmd) = <Self as ParseCommandVersion>::parse(input, sendstream_version)?;
+            Ok((input, cmd))
+        }
+    }
+}
+
+macro_rules! parse_subtypes {
+    ($f:ident, $($t:ident),+) => {
+        fn $f(hdr: CommandHeader, cmd_data: NomBytes, sendstream_version: u32) -> IResult<NomBytes, crate::Command> {
+            match hdr.ty {
+                $(CommandType::$t => {
+                    let (remaining, cmd) = <crate::$t as ParseCommandVersion>::parse(cmd_data, sendstream_version)?;
+                    Ok((remaining, cmd.into()))
+                }),+
+                ty => {
+                    let (remaining, cmd) = crate::Unknown::parse(cmd_data, ty)?;
+                    Ok((remaining, cmd.into()))
+                }
+            }
+        }
+
+        #[cfg(test)]
+        pub(crate) static PARSED_SUBTYPES: &[CommandType] = &[ $(CommandType::$t,)+ ];
+    }
+}
+
+parse_subtypes!(
+    parse_subtypes,
+    Chmod,
+    Chown,
+    Clone,
+    Link,
+    Mkdir,
+    Mkfifo,
+    Mkfile,
+    Mknod,
+    Mksock,
+    RemoveXattr,
+    Rename,
+    Rmdir,
+    SetXattr,
+    Snapshot,
+    Subvol,
+    Symlink,
+    Truncate,
+    Unlink,
+    UpdateExtent,
+    Utimes,
+    Write,
+    EncodedWrite,
+    End
+);
+
+impl ParseCommandVersion for crate::Command {
+    fn parse(input: NomBytes, sendstream_version: u32) -> IResult<NomBytes, Self> {
         let (input, hdr) = CommandHeader::parse(input)?;
         let (input, cmd_data) = nom::bytes::streaming::take(hdr.len).parse(input)?;
-        let (cmd_remaining, cmd): (_, crate::Command) = parse_subtypes!(
-            hdr,
-            cmd_data,
-            Chmod,
-            Chown,
-            Clone,
-            Link,
-            Mkdir,
-            Mkfifo,
-            Mkfile,
-            Mknod,
-            Mksock,
-            RemoveXattr,
-            Rename,
-            Rmdir,
-            SetXattr,
-            Snapshot,
-            Subvol,
-            Symlink,
-            Truncate,
-            Unlink,
-            UpdateExtent,
-            Utimes,
-            Write
-        )?;
-
-        assert!(cmd_remaining.is_empty(), "command length is wrong",);
+        let (cmd_remaining, cmd) = parse_subtypes(hdr, cmd_data, sendstream_version)?;
+        assert!(
+            cmd_remaining.is_empty(),
+            "command data not fully consumed ({} bytes left) for {cmd:?}, parser is broken",
+            cmd_remaining.len()
+        );
         Ok((input, cmd))
     }
 }
 
-impl crate::Subvol {
+impl crate::Unknown {
+    fn parse(_input: NomBytes, command_type: CommandType) -> IResult<NomBytes, Self> {
+        Ok((
+            // throw away the rest of the command bytes that we don't know what
+            // to do with
+            Bytes::new().into(),
+            Self { command_type },
+        ))
+    }
+}
+
+impl ParseCommand for crate::Subvol {
     fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, uuid) = parse_tlv(input)?;
@@ -175,7 +216,7 @@ impl crate::Subvol {
     }
 }
 
-impl crate::Chmod {
+impl ParseCommand for crate::Chmod {
     fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, mode) = parse_tlv(input)?;
@@ -183,7 +224,7 @@ impl crate::Chmod {
     }
 }
 
-impl crate::Chown {
+impl ParseCommand for crate::Chown {
     fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, uid) = parse_tlv(input)?;
@@ -192,7 +233,7 @@ impl crate::Chown {
     }
 }
 
-impl crate::Clone {
+impl ParseCommand for crate::Clone {
     fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, dst_offset) = parse_tlv(input)?;
         let (input, len) = parse_tlv(input)?;
@@ -216,7 +257,7 @@ impl crate::Clone {
     }
 }
 
-impl crate::Link {
+impl ParseCommand for crate::Link {
     fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, link_name) = parse_tlv(input)?;
         let (input, target) = parse_tlv(input)?;
@@ -224,7 +265,7 @@ impl crate::Link {
     }
 }
 
-impl crate::Symlink {
+impl ParseCommand for crate::Symlink {
     fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, link_name) = parse_tlv(input)?;
         let (input, ino) = parse_tlv(input)?;
@@ -240,7 +281,7 @@ impl crate::Symlink {
     }
 }
 
-impl crate::Mkdir {
+impl ParseCommand for crate::Mkdir {
     fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, ino) = parse_tlv(input)?;
@@ -248,7 +289,7 @@ impl crate::Mkdir {
     }
 }
 
-impl crate::Mkfile {
+impl ParseCommand for crate::Mkfile {
     fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, ino) = parse_tlv(input)?;
@@ -256,7 +297,7 @@ impl crate::Mkfile {
     }
 }
 
-impl crate::Mkspecial {
+impl ParseCommand for crate::Mkspecial {
     fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, ino) = parse_tlv(input)?;
@@ -276,9 +317,9 @@ impl crate::Mkspecial {
 
 macro_rules! mkspecial {
     ($t:ident) => {
-        impl crate::$t {
+        impl ParseCommand for crate::$t {
             fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
-                crate::Mkspecial::parse(input).map(|(r, s)| (r, Self(s)))
+                <crate::Mkspecial as ParseCommand>::parse(input).map(|(r, s)| (r, Self(s)))
             }
         }
     };
@@ -288,7 +329,7 @@ mkspecial!(Mknod);
 mkspecial!(Mkfifo);
 mkspecial!(Mksock);
 
-impl crate::RemoveXattr {
+impl ParseCommand for crate::RemoveXattr {
     fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, name) = parse_tlv(input)?;
@@ -296,7 +337,7 @@ impl crate::RemoveXattr {
     }
 }
 
-impl crate::Rename {
+impl ParseCommand for crate::Rename {
     fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, from) = parse_tlv(input)?;
         let (input, to) = parse_tlv_with_attr::<_, 0, attr_types::PathTo>(input)?;
@@ -304,14 +345,14 @@ impl crate::Rename {
     }
 }
 
-impl crate::Rmdir {
+impl ParseCommand for crate::Rmdir {
     fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         Ok((input, Self { path }))
     }
 }
 
-impl crate::SetXattr {
+impl ParseCommand for crate::SetXattr {
     fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, name) = parse_tlv(input)?;
@@ -320,7 +361,7 @@ impl crate::SetXattr {
     }
 }
 
-impl crate::Truncate {
+impl ParseCommand for crate::Truncate {
     fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, size) = parse_tlv(input)?;
@@ -328,7 +369,7 @@ impl crate::Truncate {
     }
 }
 
-impl crate::Snapshot {
+impl ParseCommand for crate::Snapshot {
     fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, uuid) = parse_tlv(input)?;
@@ -349,14 +390,14 @@ impl crate::Snapshot {
     }
 }
 
-impl crate::Unlink {
+impl ParseCommand for crate::Unlink {
     fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         Ok((input, Self { path }))
     }
 }
 
-impl crate::UpdateExtent {
+impl ParseCommand for crate::UpdateExtent {
     fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, offset) = parse_tlv(input)?;
@@ -365,12 +406,17 @@ impl crate::UpdateExtent {
     }
 }
 
-impl crate::Utimes {
-    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
+impl ParseCommandVersion for crate::Utimes {
+    fn parse(input: NomBytes, sendstream_version: u32) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, atime) = parse_tlv(input)?;
         let (input, mtime) = parse_tlv(input)?;
         let (input, ctime) = parse_tlv(input)?;
+        let (input, otime) = if sendstream_version >= 2 && !input.is_empty() {
+            parse_tlv_opt(input)?
+        } else {
+            (input, None)
+        };
         Ok((
             input,
             Self {
@@ -378,16 +424,61 @@ impl crate::Utimes {
                 atime,
                 mtime,
                 ctime,
+                otime,
             },
         ))
     }
 }
 
-impl crate::Write {
+impl ParseCommandVersion for crate::Write {
+    fn parse(input: NomBytes, sendstream_version: u32) -> IResult<NomBytes, Self> {
+        let (input, path) = parse_tlv(input)?;
+        let (input, offset) = parse_tlv(input)?;
+        if sendstream_version >= 2 {
+            let (input, _) = nom::bytes::streaming::tag(Attr::Data.tag().as_slice())(input)?;
+            let data = crate::Data(input.into());
+            Ok((Bytes::new().into(), Self { path, offset, data }))
+        } else {
+            let (input, data) = parse_tlv(input)?;
+            Ok((input, Self { path, offset, data }))
+        }
+    }
+}
+
+impl ParseCommand for crate::EncodedWrite {
     fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
         let (input, path) = parse_tlv(input)?;
         let (input, offset) = parse_tlv(input)?;
-        let (input, data) = parse_tlv(input)?;
-        Ok((input, Self { path, offset, data }))
+        let (input, unencoded_file_len) = parse_tlv(input)?;
+        let (input, unencoded_len) = parse_tlv(input)?;
+        let (input, unencoded_offset) = parse_tlv(input)?;
+        let (input, compression) = parse_tlv(input)?;
+        let (input, encryption) = if !input.is_empty() {
+            parse_tlv_opt(input)?
+        } else {
+            (input, None)
+        };
+        // the data is the rest of the commmand
+        let (input, _) = nom::bytes::streaming::tag(Attr::Data.tag().as_slice())(input)?;
+        let data = crate::Data(input.into());
+        Ok((
+            Bytes::new().into(),
+            Self {
+                path,
+                offset,
+                unencoded_file_len,
+                unencoded_len,
+                unencoded_offset,
+                compression,
+                encryption,
+                data,
+            },
+        ))
+    }
+}
+
+impl ParseCommand for crate::End {
+    fn parse(input: NomBytes) -> IResult<NomBytes, Self> {
+        Ok((input, Self))
     }
 }

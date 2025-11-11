@@ -38,7 +38,7 @@ where
     R: AsyncRead + Unpin + Send,
     F: FnMut(&crate::Command) -> ParserControl + Send,
 {
-    let mut reader = FramedRead::new(reader, framed::SendstreamDecoder);
+    let mut reader = FramedRead::new(reader, framed::SendstreamDecoder::new());
     let mut command_count = 0;
     while let Some(item_res) = reader.next().await {
         match item_res {

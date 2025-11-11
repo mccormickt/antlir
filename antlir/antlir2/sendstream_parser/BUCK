@@ -26,6 +26,7 @@ rust_library(
         "hex",
         "nix",
         "nom",
+        "num_enum",
         "serde",
         "thiserror",
         "tokio",

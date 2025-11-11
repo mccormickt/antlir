@@ -14,7 +14,25 @@ use tokio_util::codec::Decoder;
 use crate::Command;
 use crate::Error;
 use crate::wire::NomBytes;
-pub(super) struct SendstreamDecoder;
+
+pub(super) struct SendstreamDecoder {
+    state: State,
+}
+
+impl SendstreamDecoder {
+    pub(super) fn new() -> Self {
+        Self {
+            state: State::Empty,
+        }
+    }
+}
+
+enum State {
+    /// Nothing has been read yet
+    Empty,
+    /// Parsing a sendstream of this version
+    Parsing(u32),
+}
 
 pub(super) enum Item {
     /// Magic header that starts a sendstream - the only data here is the
@@ -43,23 +61,44 @@ impl Decoder for SendstreamDecoder {
         // TODO: make a NomBytes for BytesMut too? This copy feels bad
         let parsable: NomBytes = src.clone().into();
         let starting_len = parsable.len();
-        match nom::branch::alt((
-            sendstream_header.map(Item::SendstreamStart),
-            Command::parse.map(Item::Command),
-        ))
-        .parse(parsable)
-        {
-            Ok((remaining, item)) => {
-                src.advance(starting_len - remaining.len());
-                Ok(Some(item))
-            }
-            Err(nom::Err::Incomplete(needed)) => {
-                if let nom::Needed::Size(s) = needed {
-                    src.reserve(s.into());
+        match self.state {
+            State::Empty => match sendstream_header(parsable) {
+                Ok((remaining, version)) => {
+                    src.advance(starting_len - remaining.len());
+                    self.state = State::Parsing(version);
+                    Ok(Some(Item::SendstreamStart(version)))
                 }
-                Ok(None)
+                Err(nom::Err::Incomplete(needed)) => {
+                    if let nom::Needed::Size(s) = needed {
+                        src.reserve(s.into());
+                    }
+                    Ok(None)
+                }
+                Err(e) => Err(Error::Unparsable(e.to_string())),
+            },
+            State::Parsing(version) => {
+                match nom::branch::alt((
+                    sendstream_header.map(Item::SendstreamStart),
+                    Command::parser(version).map(Item::Command),
+                ))
+                .parse(parsable)
+                {
+                    Ok((remaining, item)) => {
+                        src.advance(starting_len - remaining.len());
+                        if let Item::SendstreamStart(version) = item {
+                            self.state = State::Parsing(version);
+                        }
+                        Ok(Some(item))
+                    }
+                    Err(nom::Err::Incomplete(needed)) => {
+                        if let nom::Needed::Size(s) = needed {
+                            src.reserve(s.into());
+                        }
+                        Ok(None)
+                    }
+                    Err(e) => Err(Error::Unparsable(e.to_string())),
+                }
             }
-            Err(e) => Err(Error::Unparsable(e.to_string())),
         }
     }
 }

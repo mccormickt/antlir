@@ -57,6 +57,7 @@ pub type Result<R> = std::result::Result<R, Error>;
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(untagged))]
 pub enum Command {
+    Unknown(Unknown),
     Chmod(Chmod),
     Chown(Chown),
     Clone(Clone),
@@ -79,6 +80,7 @@ pub enum Command {
     UpdateExtent(UpdateExtent),
     Utimes(Utimes),
     Write(Write),
+    EncodedWrite(EncodedWrite),
 }
 
 impl Command {
@@ -87,6 +89,7 @@ impl Command {
     #[cfg(test)]
     pub(crate) fn command_type(&self) -> wire::cmd::CommandType {
         match self {
+            Self::Unknown(u) => u.command_type,
             Self::Chmod(_) => wire::cmd::CommandType::Chmod,
             Self::Chown(_) => wire::cmd::CommandType::Chown,
             Self::Clone(_) => wire::cmd::CommandType::Clone,
@@ -109,6 +112,7 @@ impl Command {
             Self::UpdateExtent(_) => wire::cmd::CommandType::UpdateExtent,
             Self::Utimes(_) => wire::cmd::CommandType::Utimes,
             Self::Write(_) => wire::cmd::CommandType::Write,
+            Self::EncodedWrite(_) => wire::cmd::CommandType::EncodedWrite,
         }
     }
 }
@@ -122,6 +126,15 @@ macro_rules! from_cmd {
         }
     };
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, AsRef)]
+#[as_ref(forward)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", serde(transparent))]
+pub struct Unknown {
+    command_type: wire::cmd::CommandType,
+}
+from_cmd!(Unknown);
 
 macro_rules! one_getter {
     ($f:ident, $ft:ty, copy) => {
@@ -536,6 +549,7 @@ macro_rules! time_alias {
 time_alias!(Atime);
 time_alias!(Ctime);
 time_alias!(Mtime);
+time_alias!(Otime);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
@@ -544,6 +558,7 @@ pub struct Utimes {
     pub(crate) atime: Atime,
     pub(crate) mtime: Mtime,
     pub(crate) ctime: Ctime,
+    pub(crate) otime: Option<Otime>,
 }
 from_cmd!(Utimes);
 getters! {Utimes, [(path, Path, borrow), (atime, Atime, copy), (mtime, Mtime,copy), (ctime, Ctime, copy)]}
@@ -566,7 +581,7 @@ impl FileOffset {
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, AsRef, From)]
 #[as_ref(forward)]
-pub struct Data(Bytes);
+pub struct Data(pub(crate) Bytes);
 
 impl Data {
     #[inline]
@@ -590,16 +605,19 @@ impl std::fmt::Debug for Data {
             Ok(s) => Cow::Borrowed(s),
             Err(_) => Cow::Owned(hex::encode(&self.0)),
         };
-        if s.len() <= 128 {
+        if s.chars().count() <= 128 {
             write!(f, "{s:?}")
         } else {
-            write!(
-                f,
-                "{:?} <truncated ({}b total)> {:?}",
-                &s[..64],
-                s.len(),
-                &s[s.len() - 64..]
-            )
+            let left: String = s.chars().take(64).collect();
+            let right: String = s
+                .chars()
+                .rev()
+                .take(64)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect();
+            write!(f, "{left:?} <truncated ({}b total)> {right:?}", s.len(),)
         }
     }
 }
@@ -613,6 +631,86 @@ pub struct Write {
 }
 from_cmd!(Write);
 getters! {Write, [(path, Path, borrow), (offset, FileOffset, copy), (data, Data, borrow)]}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+pub struct EncodedWrite {
+    pub(crate) path: BytesPath,
+    pub(crate) offset: FileOffset,
+    pub(crate) unencoded_file_len: UnencodedFileLen,
+    pub(crate) unencoded_len: UnencodedLen,
+    pub(crate) unencoded_offset: UnencodedOffset,
+    pub(crate) compression: Compression,
+    pub(crate) encryption: Option<Encryption>,
+    pub(crate) data: Data,
+}
+from_cmd!(EncodedWrite);
+getters! {EncodedWrite, [(path, Path, borrow), (offset, FileOffset, copy), (data, Data, borrow)]}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, AsRef, Deref)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", serde(transparent))]
+pub struct UnencodedFileLen(u64);
+
+impl UnencodedFileLen {
+    pub fn as_u64(self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, AsRef, Deref)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", serde(transparent))]
+pub struct UnencodedLen(u64);
+
+impl UnencodedLen {
+    pub fn as_u64(self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, AsRef, Deref)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", serde(transparent))]
+pub struct UnencodedOffset(u64);
+
+impl UnencodedOffset {
+    pub fn as_u64(self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, AsRef, Deref)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", serde(transparent))]
+pub struct Compression(u32);
+
+impl Compression {
+    pub fn as_u32(self) -> u32 {
+        self.0
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, AsRef, Deref)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", serde(transparent))]
+pub struct Encryption(u32);
+
+impl Encryption {
+    pub fn as_u32(self) -> u32 {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+pub struct End;
+
+impl From<End> for Command {
+    fn from(_: End) -> Self {
+        Self::End
+    }
+}
 
 #[allow(clippy::expect_used)]
 #[cfg(test)]
@@ -661,11 +759,11 @@ mod tests {
             if parsed_txt != good_txt {
                 panic!(
                     "{}",
-                    SimpleDiff::from_str(&parsed_txt, good_txt, "parsed", "good")
+                    SimpleDiff::from_str(good_txt, &parsed_txt, "good", "parsed")
                 )
             }
         }
-        assert_eq!(num_cmds_parsed, 94);
+        assert_eq!(num_cmds_parsed, 106);
     }
 
     /// Demonstrate how we might eagerly abort parsing after collecting information embedded in an
@@ -696,8 +794,9 @@ mod tests {
 
     #[tokio::test]
     async fn sendstream_covers_all_commands() {
-        let all_cmds: BTreeSet<_> = wire::cmd::CommandType::iter()
-            .filter(|c| *c != wire::cmd::CommandType::Unspecified)
+        let all_cmds: BTreeSet<_> = wire::cmd::PARSED_SUBTYPES
+            .iter()
+            .copied()
             // update_extent is used for no-file-data sendstreams (`btrfs send
             // --no-data`), so it's not super useful to cover here
             .filter(|c| *c != wire::cmd::CommandType::UpdateExtent)
@@ -711,9 +810,6 @@ mod tests {
         })
         .await
         .expect("while parsing");
-        if all_cmds != seen_cmds {
-            let missing: BTreeSet<_> = all_cmds.difference(&seen_cmds).collect();
-            panic!("sendstream did not include some commands: {:?}", missing,);
-        }
+        assert_eq!(seen_cmds, all_cmds);
     }
 }

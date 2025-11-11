@@ -11,7 +11,8 @@ use std::time::SystemTime;
 use nix::unistd::Gid;
 use nix::unistd::Uid;
 use nom::IResult;
-use nom::Parser as _;
+use nom::Parser;
+use nom::combinator::opt;
 use uuid::Uuid;
 
 use crate::BytesPath;
@@ -53,6 +54,58 @@ where
                 input,
                 #[allow(clippy::expect_used)]
                 T::parse_exact(data.try_into().expect("length is already checked")),
+            ))
+        }
+    }
+}
+
+/// Parse an optional TLV with the output type's primary attribute tag. If this
+/// TLV is not here, return None
+pub(crate) fn parse_tlv_opt<T, const L: usize, Attr>(
+    input: NomBytes,
+) -> IResult<NomBytes, Option<T>>
+where
+    T: Tlv<L, Attr = Attr>,
+    Attr: AttrTypeParam,
+{
+    parse_tlv_with_attr_opt::<T, L, T::Attr>(input)
+}
+
+/// Parse an optional TLV with an explicit attribute tag. This allows for
+/// parsing identical data types from the different Attrs.
+pub(crate) fn parse_tlv_with_attr_opt<T, const L: usize, Attr>(
+    input: NomBytes,
+) -> IResult<NomBytes, Option<T>>
+where
+    T: Tlv<L>,
+    // Ensure that T can be parsed from this attribute
+    T: ParsesFromAttr<Attr>,
+    Attr: AttrTypeParam,
+{
+    // guarantee that the tlv type is what we expected
+    let (input, tag) =
+        opt(nom::bytes::streaming::tag(Attr::attr().tag().as_slice())).parse(input)?;
+    if tag.is_none() {
+        return Ok((input, None));
+    }
+    match L {
+        0 => {
+            let (input, len) = nom::number::streaming::le_u16(input)?;
+            let (input, data) = nom::bytes::streaming::take(len)(input)?;
+            Ok((input, Some(T::parse(data))))
+        }
+        _ => {
+            // this will cause the parser to fail if the length is not
+            // exactly L bytes
+            let (input, _) =
+                nom::bytes::streaming::tag((L as u16).to_le_bytes().as_slice())(input)?;
+            let (input, data) = nom::bytes::streaming::take(L)(input)?;
+            Ok((
+                input,
+                #[allow(clippy::expect_used)]
+                Some(T::parse_exact(
+                    data.try_into().expect("length is already checked"),
+                )),
             ))
         }
     }
@@ -213,6 +266,43 @@ tlv_impl!(u64, 8, Size, |data: [u8; 8]| -> u64 {
     u64::from_le_bytes(data)
 });
 
+tlv_impl!(
+    crate::UnencodedFileLen,
+    8,
+    UnencodedFileLen,
+    |data: [u8; 8]| -> crate::UnencodedFileLen {
+        crate::UnencodedFileLen(u64::from_le_bytes(data))
+    }
+);
+
+tlv_impl!(
+    crate::UnencodedLen,
+    8,
+    UnencodedLen,
+    |data: [u8; 8]| -> crate::UnencodedLen { crate::UnencodedLen(u64::from_le_bytes(data)) }
+);
+
+tlv_impl!(
+    crate::UnencodedOffset,
+    8,
+    UnencodedOffset,
+    |data: [u8; 8]| -> crate::UnencodedOffset { crate::UnencodedOffset(u64::from_le_bytes(data)) }
+);
+
+tlv_impl!(
+    crate::Compression,
+    4,
+    Compression,
+    |data: [u8; 4]| -> crate::Compression { crate::Compression(u32::from_le_bytes(data)) }
+);
+
+tlv_impl!(
+    crate::Encryption,
+    4,
+    Encryption,
+    |data: [u8; 4]| -> crate::Encryption { crate::Encryption(u32::from_le_bytes(data)) }
+);
+
 fn parse_time(data: [u8; 12]) -> SystemTime {
     #[allow(clippy::expect_used)]
     let secs = u64::from_le_bytes(data[..8].try_into().expect("right size"));
@@ -232,6 +322,7 @@ macro_rules! time_tlv {
 time_tlv!(Atime);
 time_tlv!(Mtime);
 time_tlv!(Ctime);
+time_tlv!(Otime);
 
 pub(crate) trait AttrTypeParam {
     fn attr() -> Attr;
@@ -308,11 +399,22 @@ gen_attrs_code!(
     CloneCtransid,
     ClonePath,
     CloneOffset,
-    CloneLen
+    CloneLen,
+    FallocateMode,
+    FileAttr,
+    UnencodedFileLen,
+    UnencodedLen,
+    UnencodedOffset,
+    Compression,
+    Encryption,
+    VerityAlgorithm,
+    BlockSize,
+    SaltData,
+    SigData
 );
 
 impl Attr {
-    fn tag(self) -> [u8; 2] {
+    pub(crate) fn tag(self) -> [u8; 2] {
         self.as_u16().to_le_bytes()
     }
 }

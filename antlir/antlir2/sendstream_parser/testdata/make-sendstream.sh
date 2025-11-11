@@ -10,7 +10,7 @@ out="$(realpath "$2")"
 
 pushd "$1"
 
-btrfs subvolume delete demo demo-undo || true
+btrfs subvolume delete demo demo-undo encoded-write || true
 
 btrfs subvolume create demo
 pushd demo
@@ -57,7 +57,16 @@ btrfs property set demo-undo ro true
 
 btrfs send demo -f "$out.1"
 btrfs send -p demo demo-undo -f "$out.2"
-cat "$out.1" "$out.2" > "$out"
-rm "$out.1" "$out.2"
 
+btrfs subvolume create encoded-write
+pushd encoded-write
+touch file
+btrfs property set file compression zstd
+yes "Lorem ipsum" | head -c 64K > file
+popd
+btrfs property set encoded-write ro true
+btrfs send --compressed-data encoded-write -f encoded-write.sendstream
+
+cat "$out.1" "$out.2" "encoded-write.sendstream" > "$out"
+rm "$out.1" "$out.2" "encoded-write.sendstream"
 popd
