@@ -22,12 +22,14 @@ rust_library(
     deps = [
         "bytes",
         "derive_more",
+        "futures",
         "hex",
         "nix",
         "nom",
         "serde",
         "thiserror",
         "tokio",
+        "tokio-util",
         "uuid",
     ],
 )

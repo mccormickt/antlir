@@ -40,9 +40,9 @@ pub mod wire;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(
-        "Sendstream had unexpected trailing data. This probably means the parser is broken: {0:?}"
+        "Sendstream had unexpected trailing data ({0} bytes). This probably means the parser is broken"
     )]
-    TrailingData(Vec<u8>),
+    TrailingData(usize),
     #[error("Sendstream is incomplete")]
     Incomplete,
     #[error("IO error: {0:#}")]
