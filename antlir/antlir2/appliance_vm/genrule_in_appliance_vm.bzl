@@ -55,4 +55,7 @@ _genrule_in_appliance_vm = rule(
     },
 )
 
-genrule_in_appliance_vm = rule_with_default_target_platform(_genrule_in_appliance_vm)
+genrule_in_appliance_vm = rule_with_default_target_platform(
+    _genrule_in_appliance_vm,
+    local_only_exec = True,
+)

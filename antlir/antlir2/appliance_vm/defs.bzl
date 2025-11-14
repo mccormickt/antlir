@@ -44,11 +44,14 @@ def _appliance_vm_impl(ctx: AnalysisContext) -> list[Provider]:
 _appliance_vm = rule(
     impl = _appliance_vm_impl,
     attrs = {
-        "default_kernel": attrs.dep(),
-        "default_rootfs": attrs.dep(providers = [LayerInfo]),
-        "_crosvm": attrs.default_only(attrs.dep(default = "antlir//antlir/antlir2/appliance_vm:crosvm")),
-        "_runner": attrs.default_only(attrs.dep(default = "antlir//antlir/antlir2/appliance_vm:runner")),
+        "default_kernel": attrs.exec_dep(),
+        "default_rootfs": attrs.exec_dep(providers = [LayerInfo]),
+        "_crosvm": attrs.default_only(attrs.exec_dep(default = "antlir//antlir/antlir2/appliance_vm:crosvm")),
+        "_runner": attrs.default_only(attrs.exec_dep(default = "antlir//antlir/antlir2/appliance_vm:runner")),
     },
 )
 
-appliance_vm = rule_with_default_target_platform(_appliance_vm)
+appliance_vm = rule_with_default_target_platform(
+    _appliance_vm,
+    local_only_exec = True,
+)

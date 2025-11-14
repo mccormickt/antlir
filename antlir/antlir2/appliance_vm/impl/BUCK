@@ -9,10 +9,11 @@ oncall("antlir")
 
 git_fetch(
     name = "kernel.git",
+    rev = "a38297e3fb012ddfa7ce0321a7e5a8daeb1872b6", # @oss-enable
+    exec_compatible_with = ["prelude//platforms:may_run_local"],
     # @oss-disable
     repo = "https://github.com/torvalds/linux.git", # @oss-enable
     # @oss-disable
-    rev = "a38297e3fb012ddfa7ce0321a7e5a8daeb1872b6", # @oss-enable
 )
 
 export_file(
@@ -29,7 +30,7 @@ genrule_in_image(
     bash = selects.apply(
         selects.join(
             out = select({
-                "ovr_config//cpu:arm64": "arch/arm64/boot/Image.gz",
+                "ovr_config//cpu:arm64": "arch/arm64/boot/Image",
                 "ovr_config//cpu:x86_64": "arch/x86/boot/bzImage",
             }),
             config = select({
