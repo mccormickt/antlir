@@ -12,7 +12,7 @@ class TestUname(unittest.TestCase):
         with open(os.environ["UNAME"]) as f:
             vm_uname = f.read().strip()
 
-        self.assertEqual(vm_uname, "6.4.3")
+        self.assertEqual(vm_uname, "6.16.1")
 
     def test_alt_rootfs(self) -> None:
         with open(os.environ["ALT_ROOTFS"]) as f:
