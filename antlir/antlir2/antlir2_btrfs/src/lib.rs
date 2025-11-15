@@ -36,8 +36,8 @@ mod ioctl;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("not a btrfs filesystem")]
-    NotBtrfs,
+    #[error("not a btrfs filesystem: {0}")]
+    NotBtrfs(PathBuf),
     #[error("directory is not a btrfs subvolume")]
     NotSubvol,
     #[error("cannot delete root subvolume")]
@@ -79,10 +79,10 @@ fn name_bytes<const L: usize>(name: &OsStr) -> [u8; L] {
     buf
 }
 
-fn ensure_is_btrfs(fd: &impl AsFd) -> Result<()> {
+fn ensure_is_btrfs(fd: &impl AsFd, path: impl AsRef<Path>) -> Result<()> {
     let statfs = fstatfs(fd).map_err(std::io::Error::from)?;
     if statfs.filesystem_type() != BTRFS_SUPER_MAGIC {
-        return Err(Error::NotBtrfs);
+        return Err(Error::NotBtrfs(path.as_ref().to_path_buf()));
     }
     Ok(())
 }
@@ -107,7 +107,7 @@ impl Subvolume {
         let fd = Dir::open(path.as_ref(), OFlag::O_DIRECTORY, Mode::empty())
             .map_err(std::io::Error::from)?;
 
-        ensure_is_btrfs(&fd)?;
+        ensure_is_btrfs(&fd, path.as_ref())?;
 
         let stat = fstat(&fd).map_err(std::io::Error::from)?;
         if stat.st_ino != INO_SUBVOL {
@@ -136,14 +136,11 @@ impl Subvolume {
     }
 
     pub fn create(path: impl AsRef<Path>) -> Result<Self> {
-        let parent_fd = Dir::open(
-            path.as_ref().parent().ok_or(Error::CannotCreateRoot)?,
-            OFlag::O_DIRECTORY,
-            Mode::empty(),
-        )
-        .map_err(std::io::Error::from)?;
+        let parent_path = path.as_ref().parent().ok_or(Error::CannotCreateRoot)?;
+        let parent_fd = Dir::open(parent_path, OFlag::O_DIRECTORY, Mode::empty())
+            .map_err(std::io::Error::from)?;
 
-        ensure_is_btrfs(&parent_fd)?;
+        ensure_is_btrfs(&parent_fd, parent_path)?;
 
         let args = ioctl::vol_args_v2 {
             id: ioctl::vol_args_v2_spec {
@@ -165,14 +162,11 @@ impl Subvolume {
     }
 
     pub fn snapshot(&self, path: impl AsRef<Path>, flags: SnapshotFlags) -> Result<Self> {
-        let new_parent_fd = Dir::open(
-            path.as_ref().parent().ok_or(Error::CannotCreateRoot)?,
-            OFlag::O_DIRECTORY,
-            Mode::empty(),
-        )
-        .map_err(std::io::Error::from)?;
+        let new_parent_path = path.as_ref().parent().ok_or(Error::CannotCreateRoot)?;
+        let new_parent_fd = Dir::open(new_parent_path, OFlag::O_DIRECTORY, Mode::empty())
+            .map_err(std::io::Error::from)?;
 
-        ensure_is_btrfs(&new_parent_fd)?;
+        ensure_is_btrfs(&new_parent_fd, new_parent_path)?;
 
         let args = ioctl::vol_args_v2 {
             id: ioctl::vol_args_v2_spec {
@@ -314,8 +308,8 @@ impl Debug for Info {
 }
 
 pub fn ensure_path_is_on_btrfs(path: impl AsRef<Path>) -> Result<()> {
-    let fd = OpenOptions::new().read(true).open(path)?;
-    ensure_is_btrfs(&fd)
+    let fd = OpenOptions::new().read(true).open(&path)?;
+    ensure_is_btrfs(&fd, path)
 }
 
 #[cfg(test)]
@@ -348,7 +342,7 @@ mod tests {
             "expected error on subvol lookup for regular directory"
         );
         assert!(
-            matches!(Subvolume::open("/tmp"), Err(Error::NotBtrfs)),
+            matches!(Subvolume::open("/tmp"), Err(Error::NotBtrfs(_))),
             "expected error on subvol lookup for non-btrfs"
         );
         Ok(())
