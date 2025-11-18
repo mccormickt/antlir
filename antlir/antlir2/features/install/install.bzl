@@ -102,6 +102,7 @@ def install(
         fail("always_use_gnu_debuglink requires split_debuginfo=True")
 
     exec_deps = {
+        "_debuginfo_splitter": "fbcode//antlir/antlir2/tools:debuginfo-splitter",
         "_mac_signer": "fbcode//python/runtime/tools:recursive_mac_signer",
         "_objcopy": internal_external(
             fb = "fbsource//third-party/binutils:objcopy",
@@ -384,6 +385,7 @@ def _impl(ctx: AnalysisContext) -> list[Provider] | Promise:
                 ctx = ctx,
                 src = src,
                 objcopy = ctx.attrs._objcopy,
+                debuginfo_splitter = ctx.attrs._debuginfo_splitter,
             )
             binary_info = binary_record(
                 installed = installed_binary(
@@ -549,6 +551,7 @@ install_rule = rule(
         ),
         "xattrs": attrs.dict(attrs.string(), attrs.string(), default = {}),
         "_binaries_require_repo": binaries_require_repo.optional_attr,
+        "_debuginfo_splitter": attrs.option(attrs.exec_dep(), default = None),
         "_ensure_dir_exists_plugin": attrs.option(attrs.label(), default = None),
         "_mac_signer": attrs.option(attrs.exec_dep(), default = None),
         "_objcopy": attrs.option(attrs.exec_dep(), default = None),

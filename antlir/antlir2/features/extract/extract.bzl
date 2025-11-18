@@ -101,6 +101,7 @@ def extract_buck_binary(
         },
         exec_deps = {
             "_analyze": "antlir//antlir/antlir2/features/extract:extract-buck-binary-analyze",
+            "_debuginfo_splitter": "fbcode//antlir/antlir2/tools:debuginfo-splitter",
             "_objcopy": internal_external(
                 fb = "fbsource//third-party/binutils:objcopy",
                 oss = "toolchains//:objcopy",
@@ -141,6 +142,7 @@ def _extract_buck_binary_impl(ctx: AnalysisContext) -> list[Provider]:
             ctx = ctx,
             src = ctx.attrs.src,
             objcopy = ctx.attrs._objcopy,
+            debuginfo_splitter = ctx.attrs._debuginfo_splitter,
         )
         src = split_anon_target.artifact("src")
     else:
@@ -189,6 +191,7 @@ extract_buck_binary_rule = rule(
         "strip": attrs.bool(default = True),
         "target_arch": attrs.string(),
         "_analyze": attrs.exec_dep(),
+        "_debuginfo_splitter": attrs.option(attrs.exec_dep(), default = None),
         "_objcopy": attrs.option(attrs.exec_dep(), default = None),
     },
 )
