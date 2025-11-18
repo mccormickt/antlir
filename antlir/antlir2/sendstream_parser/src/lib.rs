@@ -719,6 +719,8 @@ mod tests {
     use std::fmt::Write;
     use std::io::Cursor;
 
+    use futures::StreamExt;
+    use futures::future;
     use similar_asserts::SimpleDiff;
 
     use super::*;
@@ -746,12 +748,13 @@ mod tests {
         let cursor = Cursor::new(data);
         let mut parsed_txt = String::new();
         let mut sendstream_index = 0;
-        let num_cmds_parsed = wire::parse(cursor, |cmd| {
-            serialize_cmd(&mut sendstream_index, &mut parsed_txt, cmd);
-            wire::ParserControl::KeepGoing
-        })
-        .await
-        .expect("while parsing");
+        let mut num_cmds_parsed = 0;
+        let mut parser = wire::parse(cursor);
+        while let Some(cmd_res) = parser.next().await {
+            let cmd = cmd_res.expect("failed to parse");
+            serialize_cmd(&mut sendstream_index, &mut parsed_txt, &cmd);
+            num_cmds_parsed += 1;
+        }
         if let Some(dst) = std::env::var_os("UPDATE_DEMO_TXT") {
             std::fs::write(dst, parsed_txt).expect("while writing to {dst}");
         } else {
@@ -766,32 +769,6 @@ mod tests {
         assert_eq!(num_cmds_parsed, 106);
     }
 
-    /// Demonstrate how we might eagerly abort parsing after collecting information embedded in an
-    /// early command.
-    #[tokio::test]
-    async fn partial_parse() {
-        let data = include_bytes!("../testdata/demo.sendstream");
-        let cursor = Cursor::new(data);
-        let mut uuid: Option<Uuid> = None;
-        let num_cmds_parsed = wire::parse(cursor, |cmd| {
-            if let Command::Subvol(sv) = cmd {
-                uuid = Some(sv.uuid());
-                return wire::ParserControl::Enough;
-            }
-            wire::ParserControl::KeepGoing
-        })
-        .await
-        .expect("while parsing");
-        assert_eq!(
-            uuid,
-            Some(
-                Uuid::parse_str("0fbf2b5f-ff82-a748-8b41-e35aec190b49")
-                    .expect("while parsing uuid")
-            )
-        );
-        assert_eq!(num_cmds_parsed, 1);
-    }
-
     #[tokio::test]
     async fn sendstream_covers_all_commands() {
         let all_cmds: BTreeSet<_> = wire::cmd::PARSED_SUBTYPES
@@ -803,13 +780,15 @@ mod tests {
             .collect();
         let data = include_bytes!("../testdata/demo.sendstream");
         let cursor = Cursor::new(data);
-        let mut seen_cmds: BTreeSet<wire::cmd::CommandType> = BTreeSet::new();
-        wire::parse(cursor, |cmd| {
-            seen_cmds.insert(cmd.command_type());
-            wire::ParserControl::KeepGoing
-        })
-        .await
-        .expect("while parsing");
+        let seen_cmds: BTreeSet<_> = wire::parse(cursor)
+            .filter_map(|i| {
+                future::ready(match i {
+                    Ok(cmd) => Some(cmd.command_type()),
+                    Err(e) => panic!("failed to parse: {e}"),
+                })
+            })
+            .collect()
+            .await;
         assert_eq!(seen_cmds, all_cmds);
     }
 }
