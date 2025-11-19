@@ -47,7 +47,7 @@ def install(
         always_use_gnu_debuglink: bool = False,
         setcap: str | None = None,
         default_permissions: default_permissions = default_permissions(),
-        ignore_symlink_tree: bool = False,
+        ignore_symlink_tree: bool | Select = False,
         transition_to_distro_platform: transition_to_distro_platform | str | bool = False):
     """
     Install a file or directory into the image.
