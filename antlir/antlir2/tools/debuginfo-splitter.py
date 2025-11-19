@@ -75,6 +75,7 @@ proc = subprocess.run(
     [
         args.objcopy,
         "--strip-debug",
+        "--keep-file-symbols",
         "--remove-section=.pseudo_probe",
         "--remove-section=.pseudo_probe_desc",
         args.binary,
