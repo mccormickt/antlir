@@ -22,6 +22,15 @@ PYTHON_OUTPLACE_PAR_ROLLOUT = rollout.create_feature(
 def is_python_target(target) -> bool:
     return "library-info" in target[DefaultInfo].sub_targets and PythonLibraryInfo in target.sub_target("library-info")
 
+def is_python_xar_target(target) -> bool:
+    """
+    Returns whether the given target is a python xar archive.
+    """
+    info = _extract_python_library_info(target)
+    if info:
+        return info.par_style == "xar"
+    return False
+
 def _extract_python_library_info(target) -> PythonLibraryInfo | None:
     """
     Extracts the PythonLibraryInfo from a target.

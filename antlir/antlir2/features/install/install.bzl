@@ -10,7 +10,7 @@ load("@prelude//utils:expect.bzl", "expect")
 load("//antlir/antlir2/bzl:binaries_require_repo.bzl", "binaries_require_repo")
 load("//antlir/antlir2/bzl:build_phase.bzl", "BuildPhase")
 load("//antlir/antlir2/bzl:debuginfo.bzl", "split_binary_anon")
-load("//antlir/antlir2/bzl:python_helpers.bzl", "PYTHON_OUTPLACE_PAR_ROLLOUT", "extract_par_elfs", "is_python_target")
+load("//antlir/antlir2/bzl:python_helpers.bzl", "PYTHON_OUTPLACE_PAR_ROLLOUT", "extract_par_elfs", "is_python_target", "is_python_xar_target")
 load("//antlir/antlir2/bzl:types.bzl", "FeatureInfo", "LayerInfo")
 load(
     "//antlir/antlir2/features:feature_info.bzl",
@@ -131,6 +131,7 @@ def install(
         uses_plugins["_rpm_plugin"] = "antlir//antlir/antlir2/features/rpm:rpm"
         exec_deps["_rpm_plan"] = "antlir//antlir/antlir2/features/rpm:plan"
         distro_platform_deps["_python_pex_deps"] = "antlir//antlir/distro/toolchain/python:pex-deps"
+        distro_platform_deps["_python_xar_deps"] = "antlir//antlir/distro/toolchain/python:xar-deps"
         distro_platform_deps["_rpm_driver"] = "antlir//antlir/antlir2/features/rpm:driver"
         distro_platform_deps["_rpm_resolve"] = "antlir//antlir/antlir2/features/rpm:resolve"
     elif transition_to_distro_platform == _transition_to_distro_platform_enum("yes-without-rpm-deps"):
@@ -476,6 +477,8 @@ def _impl(ctx: AnalysisContext) -> list[Provider] | Promise:
     rpm_subjects = ctx.actions.declare_output("rpm_requires.txt")
     if src_is_python:
         features.extend([f.analysis for f in ctx.attrs._python_pex_deps[FeatureInfo].features])
+        if is_python_xar_target(ctx.attrs.src):
+            features.extend([f.analysis for f in ctx.attrs._python_xar_deps[FeatureInfo].features])
         requires_cmd = cmd_args(
             ctx.attrs._rpm_find_requires_py[RunInfo],
             rpm_subjects.as_output(),
@@ -557,6 +560,7 @@ install_rule = rule(
         "_objcopy": attrs.option(attrs.exec_dep(), default = None),
         "_python_outplace_par_override": attrs.bool(default = read_bool("antlir", "python_outplace_par", default = False)),
         "_python_pex_deps": attrs.option(attrs.dep(providers = [FeatureInfo]), default = None),
+        "_python_xar_deps": attrs.option(attrs.dep(providers = [FeatureInfo]), default = None),
         "_rpm_driver": attrs.option(attrs.dep(providers = [RunInfo]), default = None),
         "_rpm_find_requires": attrs.option(attrs.exec_dep(providers = [RunInfo]), default = None),
         "_rpm_find_requires_py": attrs.option(attrs.exec_dep(providers = [RunInfo]), default = None),
