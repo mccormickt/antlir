@@ -435,7 +435,7 @@ _ext4, _ext4_anon = _new_package_rule(
 )
 
 # @unused
-_unprivileged_dir, _unprivileged_dir_anon = _new_package_rule(
+_unprivileged_dir, unprivileged_dir_anon = _new_package_rule(
     format = "unprivileged_dir",
     is_dir = True,
     sudo = True,
