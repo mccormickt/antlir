@@ -347,8 +347,9 @@ def image_python_test(
         default_rou: str | None = None,
         systemd: str | None = None,
         target_compatible_with: list[str] | Select | None = None,
+        with_xarexec: bool = True,
         **kwargs):
-    if is_facebook:
+    if is_facebook and with_xarexec:
         with_xarexec = name + "--with-xarexec"
         image.layer(
             name = with_xarexec,
