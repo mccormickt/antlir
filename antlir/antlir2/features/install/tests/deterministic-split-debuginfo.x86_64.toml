@@ -6,7 +6,7 @@ mode = "u+rx,g+rx,o+rx"
 file-type = "regular-file"
 user = "root"
 group = "root"
-content-hash = "2c5563a16cb8a9318b6183de7b834dbd"
+content-hash = "fd17e87da8106206c67f040707170426"
 
 [file.usr]
 op = "added"
