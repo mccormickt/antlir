@@ -190,6 +190,13 @@ pub(crate) fn run(
                 writeln!(test_unit_dropin, "Wants={unit}")?;
             }
 
+            // Also send test output to journal+console so it appears in container-stdout.txt
+            // This makes test output visible even when test times out (before lines 258-259 run)
+            writeln!(test_unit_dropin)?;
+            writeln!(test_unit_dropin, "[Service]")?;
+            writeln!(test_unit_dropin, "StandardOutput=journal+console")?;
+            writeln!(test_unit_dropin, "StandardError=journal+console")?;
+
             if interactive {
                 let shell_dropin = buck_resources::get(
                     "antlir/antlir2/testing/image_test/antlir2_image_test_shell.conf",
