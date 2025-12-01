@@ -17,6 +17,7 @@ image.layer(
             "antlir2-changelog",
             "coreutils",
             "systemd",
+            "shadow-utils",
         ]),
         feature.install(
             src = "//antlir:empty",
