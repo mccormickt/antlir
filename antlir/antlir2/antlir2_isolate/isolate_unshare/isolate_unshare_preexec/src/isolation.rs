@@ -336,7 +336,7 @@ pub(crate) fn setup_isolation(isol: &IsolationContext) -> Result<()> {
         None::<&str>,
         &newroot.open_dir("proc")?.abspath(),
         Some("proc"),
-        MsFlags::empty(),
+        MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC | MsFlags::MS_NODEV,
         None::<&str>,
     )
     .context("while mounting /proc")?;
