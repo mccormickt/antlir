@@ -18,9 +18,20 @@ class Test(unittest.TestCase):
         self.assertTrue(path.exists())
         self.assertEqual(path.read_text(), "single file\n")
         self.assertEqual(path.stat().st_mode & 0o777, 0o444)
-        self.assertEqual(path.stat().st_uid, os.getuid())
-        self.assertEqual(path.stat().st_gid, os.getgid())
         self.assertEqual(path.name, basename)
+        if os.getenv("INSIDE_RE_WORKER") != "1":
+            # On RE, the input files may be materialized such that they are
+            # owned by root, not fbnobody
+            self.assertEqual(
+                path.stat().st_uid,
+                os.getuid(),
+                f"{path} should be owned by unprivileged user",
+            )
+            self.assertEqual(
+                path.stat().st_uid,
+                os.getgid(),
+                f"{path} should be owned by unprivileged group",
+            )
 
     def test_single_file_rootless(self) -> None:
         self._test_single_file(Path(os.getenv("SINGLE_FILE_ROOTLESS")))
