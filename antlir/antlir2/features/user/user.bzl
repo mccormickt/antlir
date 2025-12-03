@@ -9,6 +9,7 @@ load(
     "//antlir/antlir2/features:feature_info.bzl",
     "FeatureAnalysis",
     "ParseTimeFeature",
+    "new_feature_rule",
 )
 load("//antlir/antlir2/features/ensure_dir_exists:ensure_dir_exists.bzl", "ensure_subdirs_exist")
 load("//antlir/antlir2/features/group:group.bzl", "group_add")
@@ -127,12 +128,11 @@ def _impl(ctx: AnalysisContext) -> list[Provider]:
         ),
     ]
 
-user_rule = rule(
+user_rule = new_feature_rule(
     impl = _impl,
     attrs = {
         "comment": attrs.option(attrs.string(), default = None),
         "home_dir": attrs.string(),
-        "plugin": attrs.label(),
         "primary_group": attrs.string(),
         "shell": attrs.string(),
         "supplementary_groups": attrs.list(attrs.string()),

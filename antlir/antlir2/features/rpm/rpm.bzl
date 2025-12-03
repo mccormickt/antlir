@@ -15,6 +15,7 @@ load(
     "ParseTimeFeature",
     "Planner",
     "feature_record",
+    "new_feature_rule",
 )
 load("//antlir/buck2/bzl:ensure_single_output.bzl", "ensure_single_output")
 load("//antlir/bzl:structs.bzl", "structs")
@@ -288,7 +289,7 @@ def _impl(ctx: AnalysisContext) -> list[Provider]:
         ),
     ]
 
-rpms_rule = rule(
+rpms_rule = new_feature_rule(
     impl = _impl,
     attrs = {
         "action": attrs.enum(["install", "remove", "remove_if_exists", "upgrade", "module_enable"]),
@@ -300,7 +301,6 @@ rpms_rule = rule(
         # support
         "driver": attrs.dep(providers = [RunInfo]),
         "plan": attrs.exec_dep(providers = [RunInfo]),
-        "plugin": attrs.label(),
         "resolve": attrs.dep(providers = [RunInfo]),
         "subjects": attrs.list(attrs.string()),
         "subjects_src": attrs.option(attrs.source(), default = None),

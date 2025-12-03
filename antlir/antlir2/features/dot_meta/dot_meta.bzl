@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 load("//antlir/antlir2/bzl:build_phase.bzl", "BuildPhase")
-load("//antlir/antlir2/features:feature_info.bzl", "FeatureAnalysis", "ParseTimeFeature")
+load("//antlir/antlir2/features:feature_info.bzl", "FeatureAnalysis", "ParseTimeFeature", "new_feature_rule")
 
 def dot_meta(
         *,
@@ -58,10 +58,9 @@ def _impl(ctx: AnalysisContext) -> list[Provider]:
         ),
     ]
 
-dot_meta_rule = rule(
+dot_meta_rule = new_feature_rule(
     impl = _impl,
     attrs = {
         "build_info": attrs.dict(attrs.string(), attrs.option(attrs.string())),
-        "plugin": attrs.label(),
     },
 )

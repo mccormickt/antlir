@@ -3,7 +3,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-load("//antlir/antlir2/features:feature_info.bzl", "FeatureAnalysis", "ParseTimeFeature")
+load(
+    "//antlir/antlir2/features:feature_info.bzl",
+    "FeatureAnalysis",
+    "ParseTimeFeature",
+    "new_feature_rule",
+)
 
 def tarball(
         *,
@@ -40,12 +45,11 @@ def _impl(ctx: AnalysisContext) -> list[Provider]:
         ),
     ]
 
-tarball_rule = rule(
+tarball_rule = new_feature_rule(
     impl = _impl,
     attrs = {
         "force_root_ownership": attrs.bool(),
         "into_dir": attrs.string(),
-        "plugin": attrs.label(),
         "src": attrs.source(),
         "strip_components": attrs.int(default = 0),
     },

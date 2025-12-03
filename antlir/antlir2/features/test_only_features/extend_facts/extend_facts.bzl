@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-load("//antlir/antlir2/features:feature_info.bzl", "FeatureAnalysis", "ParseTimeFeature", "PlanInfo", "Planner")
+load("//antlir/antlir2/features:feature_info.bzl", "FeatureAnalysis", "ParseTimeFeature", "PlanInfo", "Planner", "new_feature_rule")
 
 def extend_facts(
         *,
@@ -54,10 +54,9 @@ def _impl(ctx: AnalysisContext) -> list[Provider] | Promise:
         ),
     ]
 
-extend_facts_rule = rule(
+extend_facts_rule = new_feature_rule(
     impl = _impl,
     attrs = {
         "msg": attrs.string(),
-        "plugin": attrs.label(),
     },
 )

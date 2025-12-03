@@ -26,7 +26,12 @@ load("//antlir/antlir2/bzl:debuginfo.bzl", "split_binary_anon")
 load("//antlir/antlir2/bzl:platform.bzl", "arch_select")
 load("//antlir/antlir2/bzl:types.bzl", "LayerInfo")
 load("//antlir/antlir2/features:dependency_layer_info.bzl", "layer_dep_analyze")
-load("//antlir/antlir2/features:feature_info.bzl", "FeatureAnalysis", "ParseTimeFeature")
+load(
+    "//antlir/antlir2/features:feature_info.bzl",
+    "FeatureAnalysis",
+    "ParseTimeFeature",
+    "new_feature_rule",
+)
 load("//antlir/buck2/bzl:ensure_single_output.bzl", "ensure_single_output")
 load("//antlir/bzl:internal_external.bzl", "internal_external")
 
@@ -127,12 +132,11 @@ def _extract_from_layer_impl(ctx: AnalysisContext) -> list[Provider]:
         ),
     ]
 
-extract_from_layer_rule = rule(
+extract_from_layer_rule = new_feature_rule(
     impl = _extract_from_layer_impl,
     attrs = {
         "binaries": attrs.list(attrs.string(), default = []),
         "layer": attrs.dep(providers = [LayerInfo]),
-        "plugin": attrs.label(),
     },
 )
 
@@ -182,11 +186,10 @@ def _extract_buck_binary_impl(ctx: AnalysisContext) -> list[Provider]:
         ),
     ]
 
-extract_buck_binary_rule = rule(
+extract_buck_binary_rule = new_feature_rule(
     impl = _extract_buck_binary_impl,
     attrs = {
         "dst": attrs.option(attrs.string(), default = None),
-        "plugin": attrs.label(),
         "src": attrs.dep(providers = [RunInfo]),
         "strip": attrs.bool(default = True),
         "target_arch": attrs.string(),

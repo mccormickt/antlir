@@ -10,6 +10,7 @@ load(
     "FeatureAnalysis",
     "MultiFeatureAnalysis",
     "ParseTimeFeature",
+    "new_feature_rule",
 )
 load("//antlir/bzl:stat.bzl", "stat")
 
@@ -89,14 +90,13 @@ def _impl(ctx: AnalysisContext) -> list[Provider]:
         ),
     ]
 
-ensure_dir_exists_rule = rule(
+ensure_dir_exists_rule = new_feature_rule(
     impl = _impl,
     attrs = {
         "build_phase": attrs.enum(BuildPhase.values(), default = "compile"),
         "group": attrs.string(),
         "into_dir": attrs.string(),
         "mode": attrs.one_of(attrs.string(), attrs.int()),
-        "plugin": attrs.label(),
         "subdirs_to_create": attrs.string(),
         "user": attrs.string(),
     },

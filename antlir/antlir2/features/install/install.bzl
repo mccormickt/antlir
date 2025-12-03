@@ -17,6 +17,7 @@ load(
     "FeatureAnalysis",
     "MultiFeatureAnalysis",
     "ParseTimeFeature",
+    "new_feature_rule",
 )
 load("//antlir/antlir2/features/rpm:rpm.bzl", "rpms_rule")
 load("//antlir/buck2/bzl:ensure_single_output.bzl", "ensure_single_output")
@@ -515,7 +516,7 @@ def _impl(ctx: AnalysisContext) -> list[Provider] | Promise:
 
     return anon_rpm_target.promise.map(_map)
 
-install_rule = rule(
+install_rule = new_feature_rule(
     impl = _impl,
     attrs = {
         "always_use_gnu_debuglink": attrs.bool(default = True),
@@ -535,7 +536,6 @@ install_rule = rule(
             default = False,
             doc = "Always install as a regular file, even in @mode/dev",
         ),
-        "plugin": attrs.label(),
         "setcap": attrs.option(attrs.string(), default = None),
         "split_debuginfo": attrs.bool(default = True),
         "src": attrs.option(

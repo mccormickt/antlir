@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 load("//antlir/antlir2/bzl:types.bzl", "LayerInfo")
-load("//antlir/antlir2/features:feature_info.bzl", "FeatureAnalysis", "ParseTimeFeature")
+load("//antlir/antlir2/features:feature_info.bzl", "FeatureAnalysis", "ParseTimeFeature", "new_feature_rule")
 load("//antlir/bzl:types.bzl", "types")
 
 # IMO this is a misfeature, but it is used in many places throughout the legacy
@@ -92,14 +92,13 @@ def _impl(ctx: AnalysisContext) -> list[Provider]:
     else:
         fail("invalid source_kind '{}'".format(ctx.attrs.source_kind))
 
-mount_rule = rule(
+mount_rule = new_feature_rule(
     impl = _impl,
     attrs = {
         "host_source": attrs.option(attrs.string()),
         "is_directory": attrs.option(attrs.bool()),
         "layer": attrs.option(attrs.dep(providers = [LayerInfo]), default = None),
         "mountpoint": attrs.option(attrs.string()),
-        "plugin": attrs.label(),
         "source_kind": attrs.enum(["layer", "host"]),
     },
 )

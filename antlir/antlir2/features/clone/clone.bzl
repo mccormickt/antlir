@@ -5,7 +5,7 @@
 
 load("//antlir/antlir2/bzl:types.bzl", "LayerInfo")
 load("//antlir/antlir2/features:dependency_layer_info.bzl", "layer_dep", "layer_dep_analyze")
-load("//antlir/antlir2/features:feature_info.bzl", "FeatureAnalysis", "ParseTimeFeature")
+load("//antlir/antlir2/features:feature_info.bzl", "FeatureAnalysis", "ParseTimeFeature", "new_feature_rule")
 
 def clone(
         *,
@@ -151,13 +151,12 @@ def _impl(ctx: AnalysisContext) -> list[Provider]:
         ),
     ]
 
-clone_rule = rule(
+clone_rule = new_feature_rule(
     impl = _impl,
     attrs = {
         "dst_path": attrs.option(attrs.string(), default = None),
         "group": attrs.option(attrs.string(), default = None),
         "path": attrs.option(attrs.string(), default = None),
-        "plugin": attrs.label(),
         "src_layer": attrs.dep(providers = [LayerInfo]),
         "src_path": attrs.option(attrs.string(), default = None),
         "user": attrs.option(attrs.string(), default = None),

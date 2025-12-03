@@ -164,6 +164,17 @@ def data_only_feature_rule(
         attrs = feature_attrs | {"plugin": attrs.label()},
     )
 
+def new_feature_rule(
+        *,
+        impl,
+        attrs: dict[str, Attr]):
+    return rule(
+        impl = impl,
+        attrs = {
+            "plugin": native.attrs.label(),
+        } | attrs,
+    )
+
 def with_phase_override(
         feature: FeatureAnalysis,
         *,

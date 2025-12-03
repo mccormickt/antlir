@@ -8,6 +8,7 @@ load(
     "//antlir/antlir2/features:feature_info.bzl",
     "FeatureAnalysis",
     "ParseTimeFeature",
+    "new_feature_rule",
 )
 load("//antlir/buck2/bzl:ensure_single_output.bzl", "ensure_single_output")
 
@@ -48,11 +49,10 @@ def _impl(ctx: AnalysisContext) -> list[Provider]:
         ),
     ]
 
-group_rule = rule(
+group_rule = new_feature_rule(
     impl = _impl,
     attrs = {
         "groupname": attrs.string(),
-        "plugin": attrs.label(),
         "uidmap": attrs.dep(),
     },
 )

@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 load("//antlir/antlir2/bzl:build_phase.bzl", "BuildPhase")
-load("//antlir/antlir2/features:feature_info.bzl", "FeatureAnalysis", "ParseTimeFeature")
+load("//antlir/antlir2/features:feature_info.bzl", "FeatureAnalysis", "ParseTimeFeature", "new_feature_rule")
 
 def genrule(
         *,
@@ -58,14 +58,13 @@ def _genrule_impl(ctx: AnalysisContext) -> list[Provider]:
         plugin = ctx.attrs.plugin,
     )]
 
-genrule_rule = rule(
+genrule_rule = new_feature_rule(
     impl = _genrule_impl,
     attrs = {
         # TODO: just use attrs.arg() by itself
         "args": attrs.dict(attrs.string(), attrs.arg()),
         "bind_repo_ro": attrs.bool(),
         "mount_platform": attrs.bool(),
-        "plugin": attrs.label(),
         "user": attrs.string(),
     },
 )
