@@ -32,7 +32,9 @@ struct Args {
 }
 
 fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::TRACE)
+        .init();
     let args = Args::parse();
 
     let default_interpreter = extract::default_interpreter(args.target_arch);
