@@ -186,6 +186,7 @@ fn main() -> Result<()> {
             }
             Contents::File(mut f) => {
                 builder.append_file(path, &mut f)?;
+                drop(f);
             }
             Contents::Whiteout => {
                 builder.append_data(&mut entry.header, path, std::io::empty())?;

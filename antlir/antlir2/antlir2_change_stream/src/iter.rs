@@ -41,7 +41,8 @@ impl<C: Contents + 'static> Iter<C> {
     }
 
     fn with_initial_instruction(instruction: compare::Instruction<C>) -> Result<Self> {
-        let (tx, rx) = std::sync::mpsc::channel();
+        // use a bounded channel to limit the number of NewFile Changes (open file descriptors) that can be created at one time
+        let (tx, rx) = std::sync::mpsc::sync_channel(4096);
         std::thread::Builder::new()
             .name("compare".to_owned())
             .spawn(move || {
