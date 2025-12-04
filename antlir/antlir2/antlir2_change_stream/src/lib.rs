@@ -69,6 +69,8 @@ pub enum Operation<C> {
     SetXattr { name: OsString, value: Vec<u8> },
     /// Remove an xattr
     RemoveXattr { name: OsString },
+    /// Done with a file or directory, no more changes will be emitted for it
+    Close,
 }
 
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]

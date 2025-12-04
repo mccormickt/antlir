@@ -109,6 +109,7 @@ fn empty_to_some_expected_changes() -> Vec<Change<LossyString>> {
                 },
                 Operation::Chown { uid: 0, gid: 0 },
                 zero_times(),
+                Operation::Close,
             ],
         ))
         .chain(file_changes("foo/bar", [Operation::Mkdir { mode: 0o755 }]))
@@ -129,15 +130,24 @@ fn empty_to_some_expected_changes() -> Vec<Change<LossyString>> {
                 },
                 Operation::Chown { uid: 0, gid: 0 },
                 zero_times(),
+                Operation::Close,
             ],
         ))
         .chain(file_changes(
             "foo/bar",
-            [Operation::Chown { uid: 0, gid: 0 }, zero_times()],
+            [
+                Operation::Chown { uid: 0, gid: 0 },
+                zero_times(),
+                Operation::Close,
+            ],
         ))
         .chain(file_changes(
             "foo",
-            [Operation::Chown { uid: 0, gid: 0 }, zero_times()],
+            [
+                Operation::Chown { uid: 0, gid: 0 },
+                zero_times(),
+                Operation::Close,
+            ],
         ))
         .chain(set_times(""))
         .collect()
@@ -162,6 +172,7 @@ fn some_as_new() {
         expected.len() - 1,
         Change::new(PathBuf::from(""), Operation::Chown { uid: 0, gid: 0 }),
     );
+    expected.push(Change::new(PathBuf::from(""), Operation::Close));
     assert_eq!(
         expected,
         Iter::<LossyString>::from_empty("/some")
@@ -207,7 +218,9 @@ fn unlink_file() {
 fn touch() {
     let expected: Vec<Change<LossyString>> = set_times("foo/barbaz")
         .into_iter()
+        .chain(file_changes("foo/barbaz", [Operation::Close]))
         .chain(set_times("foo/bar/baz"))
+        .chain(file_changes("foo/bar/baz", [Operation::Close]))
         .collect();
     assert_eq!(
         expected,
@@ -220,11 +233,11 @@ fn chown() {
     let expected: Vec<Change<LossyString>> = file_changes(
         "foo/barbaz",
         // mtime does not change when doing a chown
-        [Operation::Chown { uid: 42, gid: 43 }],
+        [Operation::Chown { uid: 42, gid: 43 }, Operation::Close],
     )
     .chain(file_changes(
         "foo/bar/baz",
-        [Operation::Chown { uid: 42, gid: 43 }],
+        [Operation::Chown { uid: 42, gid: 43 }, Operation::Close],
     ))
     .collect();
     assert_eq!(
@@ -237,10 +250,13 @@ fn chown() {
 fn chmod() {
     let expected: Vec<Change<LossyString>> = file_changes(
         "foo/bar/baz",
-        [Operation::Chmod {
-            // u+sx
-            mode: 0o544 | 0o04000,
-        }],
+        [
+            Operation::Chmod {
+                // u+sx
+                mode: 0o544 | 0o04000,
+            },
+            Operation::Close,
+        ],
     )
     .chain(file_changes("foo/bar", [Operation::Chmod { mode: 0o700 }]))
     .collect();
@@ -259,6 +275,7 @@ fn change_file_contents() {
                 contents: "Baz\nChanged-Contents\n".into(),
             },
             zero_times(),
+            Operation::Close,
         ],
     )
     .collect();
@@ -282,6 +299,7 @@ fn retarget_symlink() {
                 target: "/qux".into(),
             },
             zero_times(),
+            Operation::Close,
         ],
     )
     .chain(set_times("foo"))
@@ -318,6 +336,7 @@ fn change_xattrs() {
             value: "quux".into(),
         }],
     ))
+    .chain(file_changes("foo/bar/baz", [Operation::Close]))
     .chain(file_changes(
         "foo/bar",
         [Operation::SetXattr {
@@ -352,11 +371,16 @@ fn file_to_dir() {
                 },
                 Operation::Chown { uid: 0, gid: 0 },
                 zero_times(),
+                Operation::Close,
             ],
         ))
         .chain(file_changes(
             "foo/bar/baz",
-            [Operation::Chown { uid: 0, gid: 0 }, zero_times()],
+            [
+                Operation::Chown { uid: 0, gid: 0 },
+                zero_times(),
+                Operation::Close,
+            ],
         ))
         .chain(set_times("foo/bar"))
         .collect();
@@ -378,6 +402,7 @@ fn dir_to_file() {
                     contents: "bar\n".into(),
                 },
                 Operation::Chown { uid: 0, gid: 0 },
+                Operation::Close,
             ],
         ))
         .collect();

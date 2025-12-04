@@ -53,4 +53,7 @@ class Test(TestCase):
             text=True,
             capture_output=True,
         )
-        self.assertEqual("Entrypoint!\n555 0 0\n", proc.stdout)
+        self.assertEqual(
+            "Entrypoint!\n555 0 0\nstat: cannot statx '/to-be-deleted': No such file or directory\nrecreated\n",
+            proc.stdout,
+        )

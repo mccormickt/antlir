@@ -59,6 +59,10 @@ pub(super) fn compare<C: Contents>(old: File, new: File) -> Result<Vec<Operation
         ops.push(op);
     }
 
+    if !ops.is_empty() {
+        ops.push(Operation::Close);
+    }
+
     Ok(ops)
 }
 
@@ -97,6 +101,8 @@ pub(super) fn add<C: Contents>(file: File) -> Result<Vec<Operation<C>>> {
         mtime: meta.modified()?.into_std(),
         atime: meta.accessed()?.into_std(),
     });
+
+    ops.push(Operation::Close);
 
     Ok(ops)
 }

@@ -167,6 +167,14 @@ pub(super) fn remove<C>(prefix: &Path, dir: Dir) -> Result<Vec<Instruction<C>>> 
 
 pub(super) fn add<C>(prefix: &Path, dir: Dir) -> Result<Vec<Instruction<C>>> {
     let mut stack: Vec<Instruction<C>> = Vec::new();
+
+    // Close is the very last operation (really just a marker) that must be
+    // emitted
+    stack.push(Instruction::Change(Change::new(
+        prefix.to_owned(),
+        Operation::Close,
+    )));
+
     let dir_meta = dir.dir_metadata()?;
     // Add the timestamps to the bottom of the stack so that it
     // happens last and no subsequent modifications will overwrite

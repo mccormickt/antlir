@@ -10,7 +10,23 @@ image.layer(
     name = "base",
     features = [
         feature.rpms_install(rpms = ["coreutils"]),
+        feature.install_text(
+            dst = "/to-be-deleted",
+            text = "to-be-deleted",
+        ),
+        feature.install_text(
+            dst = "/to-be-deleted-and-recreated",
+            text = "to-be-deleted-and-recreated",
+        ),
     ],
+)
+
+image.layer(
+    name = "intermediate",
+    features = [
+        feature.remove(path = "/to-be-deleted-and-recreated"),
+    ],
+    parent_layer = ":base",
 )
 
 image.layer(
@@ -18,6 +34,11 @@ image.layer(
     features = [
         # make sure that RPM installations can be layered
         feature.rpms_install(rpms = ["bash"]),
+        feature.remove(path = "/to-be-deleted"),
+        feature.install_text(
+            dst = "/to-be-deleted-and-recreated",
+            text = "recreated\n",
+        ),
         feature.install_text(
             dst = "/entrypoint.sh",
             mode = "a+rx",
@@ -27,10 +48,12 @@ if [ "$1" != "foo" ]; then
 fi
 echo "Entrypoint!"
 stat --format="%a %u %g" /entrypoint.sh
+stat /to-be-deleted 2>&1 || true
+cat /to-be-deleted-and-recreated
 """,
         ),
     ],
-    parent_layer = ":base",
+    parent_layer = ":intermediate",
 )
 
 oci(

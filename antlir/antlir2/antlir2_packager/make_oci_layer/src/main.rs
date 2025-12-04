@@ -5,7 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::BufWriter;
@@ -17,6 +18,7 @@ use antlir2_change_stream::Operation;
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::bail;
+use anyhow::ensure;
 use clap::Parser;
 use nix::sys::stat::SFlag;
 use nix::sys::stat::major;
@@ -45,8 +47,14 @@ struct Entry {
 
 impl Default for Entry {
     fn default() -> Self {
+        let mut header = Header::new_ustar();
+        // Timestamps make things non-deterministic even if everything else is
+        // 100% equal. To get around this (and to preempty any bugs from tools
+        // that don't tolerate 0 timestamps very well), choose an arbitrary time
+        // of February 4 2004, the initial launch of thefacebook.com
+        header.set_mtime(1075852800);
         Self {
-            header: Header::new_ustar(),
+            header,
             contents: Contents::Unset,
             extensions: Vec::new(),
         }
@@ -57,7 +65,42 @@ enum Contents {
     Unset,
     Link(PathBuf),
     File(File),
-    Whiteout,
+}
+
+struct Entries {
+    entries: HashMap<PathBuf, Entry>,
+    finished_paths: HashSet<PathBuf>,
+}
+
+impl Entries {
+    fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+            finished_paths: HashSet::new(),
+        }
+    }
+
+    fn entry(&mut self, path: PathBuf) -> Result<&mut Entry> {
+        if self.finished_paths.contains(&path) {
+            Err(anyhow::anyhow!("{} was already closed", path.display()))
+        } else {
+            Ok(self.entries.entry(path).or_default())
+        }
+    }
+
+    fn remove(&mut self, path: PathBuf) -> Option<Entry> {
+        let entry = self.entries.remove(&path);
+        self.finished_paths.insert(path);
+        entry
+    }
+
+    fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    fn keys(&self) -> impl Iterator<Item = &PathBuf> {
+        self.entries.keys()
+    }
 }
 
 fn main() -> Result<()> {
@@ -71,28 +114,35 @@ fn main() -> Result<()> {
         Some(parent) => Iter::diff(parent, &args.child)?,
         None => Iter::from_empty(&args.child)?,
     };
-    let mut entries: BTreeMap<PathBuf, Entry> = BTreeMap::new();
+
+    let mut builder = Builder::new(BufWriter::new(File::create(&args.out)?));
+
+    let mut entries = Entries::new();
+    // separately track which paths had times set, so we can see if *only* the
+    // times were updated and skip those entries
+    let mut had_set_times: HashSet<PathBuf> = HashSet::new();
+
     for change in stream {
         let change = change?;
         let path = change.path().to_owned();
         match change.into_operation() {
             Operation::Create { mode } => {
-                let header = &mut entries.entry(path).or_default().header;
+                let header = &mut entries.entry(path)?.header;
                 header.set_mode(mode);
                 header.set_entry_type(EntryType::Regular);
             }
             Operation::Mkdir { mode } => {
-                let header = &mut entries.entry(path).or_default().header;
+                let header = &mut entries.entry(path)?.header;
                 header.set_mode(mode);
                 header.set_entry_type(EntryType::Directory);
             }
             Operation::Mkfifo { mode } => {
-                let header = &mut entries.entry(path).or_default().header;
+                let header = &mut entries.entry(path)?.header;
                 header.set_mode(mode);
                 header.set_entry_type(EntryType::Fifo);
             }
             Operation::Mknod { rdev, mode } => {
-                let header = &mut entries.entry(path).or_default().header;
+                let header = &mut entries.entry(path)?.header;
                 header.set_mode(mode);
                 let sflag = SFlag::from_bits_truncate(mode);
                 header.set_entry_type(if sflag.contains(SFlag::S_IFBLK) {
@@ -104,24 +154,25 @@ fn main() -> Result<()> {
                 header.set_device_minor(minor(rdev) as u32)?;
             }
             Operation::Chmod { mode } => {
-                let header = &mut entries.entry(path).or_default().header;
+                let header = &mut entries.entry(path)?.header;
                 header.set_mode(mode);
             }
             Operation::Chown { uid, gid } => {
-                let header = &mut entries.entry(path).or_default().header;
+                let header = &mut entries.entry(path)?.header;
                 header.set_uid(uid as u64);
                 header.set_gid(gid as u64);
             }
             Operation::SetTimes { atime: _, mtime: _ } => {
                 // timestamps make things very non-reproducible
+                had_set_times.insert(path.clone());
             }
             Operation::HardLink { target } => {
-                let entry = entries.entry(path).or_default();
+                let entry = entries.entry(path)?;
                 entry.header.set_entry_type(EntryType::Link);
                 entry.contents = Contents::Link(target.to_owned());
             }
             Operation::Symlink { target } => {
-                let entry = entries.entry(path).or_default();
+                let entry = entries.entry(path)?;
                 entry.header.set_entry_type(EntryType::Symlink);
                 entry.contents = Contents::Link(target.to_owned());
             }
@@ -129,19 +180,19 @@ fn main() -> Result<()> {
                 // just ensure an entry exists, which will end up sending the
                 // full contents, since there is no way to represent a rename in
                 // the layer tar
-                entries.entry(path).or_default();
+                entries.entry(path)?;
             }
             Operation::Contents { contents } => {
-                let entry = entries.entry(path).or_default();
+                let entry = entries.entry(path)?;
                 entry.contents = Contents::File(contents);
             }
             Operation::RemoveXattr { .. } => {
                 // just ensure an entry exists, which will end up sending the
                 // full contents
-                entries.entry(path).or_default();
+                entries.entry(path)?;
             }
             Operation::SetXattr { name, value } => {
-                let entry = entries.entry(path).or_default();
+                let entry = entries.entry(path)?;
                 let mut key = "SCHILY.xattr.".to_owned();
                 key.push_str(
                     name.to_str()
@@ -154,66 +205,79 @@ fn main() -> Result<()> {
                 let mut wh_name = OsString::from(".wh.");
                 wh_name.push(path.file_name().expect("root dir cannot be deleted"));
                 let wh_path = path.parent().unwrap_or(Path::new("")).join(wh_name);
-                entries
-                    .entry(wh_path)
-                    .or_insert_with(Default::default)
-                    .contents = Contents::Whiteout;
+                let mut entry = Entry::default();
+                builder.append_data(&mut entry.header, wh_path, std::io::empty())?;
             }
-        }
-    }
+            Operation::Close => {
+                // we're done with an entry file, it can go into the tar now
+                let mut entry = match entries.remove(path.clone()) {
+                    Some(entry) => entry,
+                    None => {
+                        if had_set_times.contains(&path) {
+                            // if the only thing that changed was the times, we
+                            // can and should skip it
+                            continue;
+                        }
+                        bail!("{path:?} was closed but never opened")
+                    }
+                };
 
-    let mut builder = Builder::new(BufWriter::new(File::create(&args.out)?));
-    for (path, mut entry) in entries {
-        if path == Path::new("") {
-            continue;
-        }
-        // PAX extensions go ahead of the full entry header
-        entry.extensions.sort();
-        builder.append_pax_extensions(
-            entry
-                .extensions
-                .iter()
-                .map(|(k, v)| (k.as_str(), v.as_slice())),
-        )?;
-        // Timestamps make things non-deterministic even if everything else is
-        // 100% equal. To get around this (and to preempty any bugs from tools
-        // that don't tolerate 0 timestamps very well), choose an arbitrary time
-        // of February 4 2004, the initial launch of thefacebook.com
-        entry.header.set_mtime(1075852800);
-        match entry.contents {
-            Contents::Link(target) => {
-                builder.append_link(&mut entry.header, path, target)?;
-            }
-            Contents::File(mut f) => {
-                builder.append_file(path, &mut f)?;
-                drop(f);
-            }
-            Contents::Whiteout => {
-                builder.append_data(&mut entry.header, path, std::io::empty())?;
-            }
-            Contents::Unset => {
-                // Metadata only change, but the OCI spec says that any change
-                // must send the entire contents, so open it up from the child
-                // layer.
-                let meta = std::fs::symlink_metadata(args.child.join(&path))?;
-                if meta.is_file() {
-                    let mut f = File::open(args.child.join(&path))?;
-                    builder.append_file(path, &mut f)?;
-                } else if meta.is_dir() {
-                    entry.header.set_entry_type(EntryType::Directory);
-                    builder.append_data(&mut entry.header, path, std::io::empty())?;
-                } else if meta.is_symlink() {
-                    entry.header.set_entry_type(EntryType::Symlink);
-                    let target = std::fs::read_link(args.child.join(&path))?;
-                    builder.append_link(&mut entry.header, path, target)?;
-                } else {
-                    bail!(
-                        "not sure what to do with unset contents on filetype {:?}",
-                        meta.file_type(),
-                    );
+                if path == Path::new("") {
+                    // empty path (root) can't go into the tar
+                    continue;
+                }
+
+                // PAX extensions go ahead of the full entry header
+                entry.extensions.sort();
+                builder.append_pax_extensions(
+                    entry
+                        .extensions
+                        .iter()
+                        .map(|(k, v)| (k.as_str(), v.as_slice())),
+                )?;
+                match entry.contents {
+                    Contents::Link(target) => {
+                        builder.append_link(&mut entry.header, path, target)?;
+                    }
+                    Contents::File(mut f) => {
+                        builder.append_file(path, &mut f)?;
+                        drop(f);
+                    }
+                    Contents::Unset => {
+                        // Metadata only change, but the OCI spec says that any change
+                        // must send the entire contents, so open it up from the child
+                        // layer.
+                        let meta = std::fs::symlink_metadata(args.child.join(&path))?;
+                        if meta.is_file() {
+                            let mut f = File::open(args.child.join(&path))?;
+                            builder.append_file(path, &mut f)?;
+                        } else if meta.is_dir() {
+                            entry.header.set_entry_type(EntryType::Directory);
+                            builder.append_data(&mut entry.header, path, std::io::empty())?;
+                        } else if meta.is_symlink() {
+                            entry.header.set_entry_type(EntryType::Symlink);
+                            let target = std::fs::read_link(args.child.join(&path))?;
+                            builder.append_link(&mut entry.header, path, target)?;
+                        } else {
+                            bail!(
+                                "not sure what to do with unset contents on filetype {:?}",
+                                meta.file_type(),
+                            );
+                        }
+                    }
                 }
             }
         }
     }
+
+    ensure!(
+        entries.is_empty(),
+        "not all entries were closed: {}",
+        entries
+            .keys()
+            .map(|p| p.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
     Ok(())
 }
