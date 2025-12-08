@@ -149,7 +149,9 @@ fn empty_to_some_expected_changes() -> Vec<Change<LossyString>> {
                 Operation::Close,
             ],
         ))
+        // Root directory also gets SetTimes and Close when it has metadata changes
         .chain(set_times(""))
+        .chain(file_changes("", [Operation::Close]))
         .collect()
 }
 
@@ -163,16 +165,69 @@ fn empty_to_some() {
 
 #[test]
 fn some_as_new() {
-    let mut expected = empty_to_some_expected_changes();
-    expected.insert(
-        0,
-        Change::new(PathBuf::from(""), Operation::Mkdir { mode: 0o755 }),
-    );
-    expected.insert(
-        expected.len() - 1,
-        Change::new(PathBuf::from(""), Operation::Chown { uid: 0, gid: 0 }),
-    );
-    expected.push(Change::new(PathBuf::from(""), Operation::Close));
+    // When creating from empty, the root directory also gets Mkdir, Chown, SetTimes, Close
+    // in that order (from add() function)
+    let expected: Vec<Change<LossyString>> = file_changes("", [Operation::Mkdir { mode: 0o755 }])
+        .chain(file_changes("foo", [Operation::Mkdir { mode: 0o755 }]))
+        .chain(file_changes(
+            "foo/barbaz",
+            [
+                Operation::Symlink {
+                    target: "/foo/bar/baz".into(),
+                },
+                Operation::Chown { uid: 0, gid: 0 },
+                zero_times(),
+                Operation::Close,
+            ],
+        ))
+        .chain(file_changes("foo/bar", [Operation::Mkdir { mode: 0o755 }]))
+        .chain(file_changes(
+            "foo/bar/baz",
+            [
+                Operation::Create { mode: 0o444 },
+                Operation::Contents {
+                    contents: "Baz\n".into(),
+                },
+                Operation::SetXattr {
+                    name: "user.baz".into(),
+                    value: "baz".into(),
+                },
+                Operation::SetXattr {
+                    name: "user.foo".into(),
+                    value: "foo".into(),
+                },
+                Operation::Chown { uid: 0, gid: 0 },
+                zero_times(),
+                Operation::Close,
+            ],
+        ))
+        .chain(file_changes(
+            "foo/bar",
+            [
+                Operation::Chown { uid: 0, gid: 0 },
+                zero_times(),
+                Operation::Close,
+            ],
+        ))
+        .chain(file_changes(
+            "foo",
+            [
+                Operation::Chown { uid: 0, gid: 0 },
+                zero_times(),
+                Operation::Close,
+            ],
+        ))
+        // Root directory: Chown, SetTimes, Close (in that order from add())
+        .chain(file_changes(
+            "",
+            [
+                Operation::Chown { uid: 0, gid: 0 },
+                zero_times(),
+                Operation::Close,
+            ],
+        ))
+        .collect();
+
     assert_eq!(
         expected,
         Iter::<LossyString>::from_empty("/some")
@@ -195,7 +250,9 @@ fn some_to_empty() {
         .chain(file_changes("foo/bar/baz", [Operation::Unlink]))
         .chain(file_changes("foo/bar", [Operation::Rmdir]))
         .chain(file_changes("foo", [Operation::Rmdir]))
+        // Root directory gets SetTimes and Close when metadata changes
         .chain(set_times(""))
+        .chain(file_changes("", [Operation::Close]))
         .collect();
     assert_eq!(
         expected,
@@ -206,7 +263,9 @@ fn some_to_empty() {
 #[test]
 fn unlink_file() {
     let expected: Vec<Change<LossyString>> = file_changes("foo/bar/baz", [Operation::Unlink])
+        // Directory gets SetTimes and Close when contents change
         .chain(set_times("foo/bar"))
+        .chain(file_changes("foo/bar", [Operation::Close]))
         .collect();
     assert_eq!(
         expected,
@@ -258,7 +317,11 @@ fn chmod() {
             Operation::Close,
         ],
     )
-    .chain(file_changes("foo/bar", [Operation::Chmod { mode: 0o700 }]))
+    // Directory chmod should also emit Close
+    .chain(file_changes(
+        "foo/bar",
+        [Operation::Chmod { mode: 0o700 }, Operation::Close],
+    ))
     .collect();
     assert_eq!(
         expected,
@@ -302,7 +365,9 @@ fn retarget_symlink() {
             Operation::Close,
         ],
     )
+    // Directory gets SetTimes and Close when contents change
     .chain(set_times("foo"))
+    .chain(file_changes("foo", [Operation::Close]))
     .collect();
     assert_eq!(
         expected,
@@ -337,12 +402,16 @@ fn change_xattrs() {
         }],
     ))
     .chain(file_changes("foo/bar/baz", [Operation::Close]))
+    // Directory xattr changes should also emit Close
     .chain(file_changes(
         "foo/bar",
-        [Operation::SetXattr {
-            name: "user.bar".into(),
-            value: "bar".into(),
-        }],
+        [
+            Operation::SetXattr {
+                name: "user.bar".into(),
+                value: "bar".into(),
+            },
+            Operation::Close,
+        ],
     ))
     .collect();
     assert_eq!(
@@ -382,7 +451,9 @@ fn file_to_dir() {
                 Operation::Close,
             ],
         ))
+        // Directory gets SetTimes and Close when contents change
         .chain(set_times("foo/bar"))
+        .chain(file_changes("foo/bar", [Operation::Close]))
         .collect();
     assert_eq!(
         expected,
@@ -405,6 +476,8 @@ fn dir_to_file() {
                 Operation::Close,
             ],
         ))
+        // Directory gets Close when contents change (even without SetTimes in Omit mode)
+        .chain(file_changes("foo", [Operation::Close]))
         .collect();
     assert_eq!(
         expected,

@@ -32,6 +32,9 @@ fn path_open_opts() -> OpenOptions {
 
 pub(super) fn compare<C>(prefix: &Path, old: Dir, new: Dir) -> Result<Vec<Instruction<C>>> {
     let mut stack: Vec<Instruction<C>> = Vec::new();
+    // Track if we have any metadata changes for the directory itself
+    let mut has_dir_changes = false;
+
     // Add the comparison of the top-level directories to the bottom
     // of the stack so the changes are yielded after any inner
     // content changes
@@ -39,18 +42,34 @@ pub(super) fn compare<C>(prefix: &Path, old: Dir, new: Dir) -> Result<Vec<Instru
     let new_meta = new.dir_metadata()?;
     if let Some(op) = maybe_chown(&old_meta, &new_meta) {
         stack.push(Instruction::Change(Change::new(prefix.to_owned(), op)));
+        has_dir_changes = true;
     }
     if let Some(op) = maybe_chmod(&old_meta, &new_meta) {
         stack.push(Instruction::Change(Change::new(prefix.to_owned(), op)));
+        has_dir_changes = true;
     }
     if let Some(op) = maybe_set_times(&old_meta, &new_meta) {
         stack.push(Instruction::Change(Change::new(prefix.to_owned(), op)));
+        has_dir_changes = true;
     }
-    stack.extend(
-        xattr_ops(Some(old.as_raw_fd()), new.as_raw_fd())?
-            .into_iter()
-            .map(|op| Instruction::Change(Change::new(prefix.to_owned(), op))),
-    );
+    let xattr_operations: Vec<_> = xattr_ops(Some(old.as_raw_fd()), new.as_raw_fd())?;
+    if !xattr_operations.is_empty() {
+        has_dir_changes = true;
+        stack.extend(
+            xattr_operations
+                .into_iter()
+                .map(|op| Instruction::Change(Change::new(prefix.to_owned(), op))),
+        );
+    }
+
+    // If we have metadata changes for this directory, we need to close it
+    // so consumers know we're done with this entry (similar to file.rs:compare)
+    if has_dir_changes {
+        stack.insert(
+            0,
+            Instruction::Change(Change::new(prefix.to_owned(), Operation::Close)),
+        );
+    }
 
     for entry in old.entries()? {
         let entry = entry?;
