@@ -10,6 +10,7 @@ use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::BufWriter;
+use std::io::Seek;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -26,6 +27,12 @@ use nix::sys::stat::minor;
 use tar::Builder;
 use tar::EntryType;
 use tar::Header;
+
+/// Fixed mtime for reproducible tar archives.
+/// Timestamps make things non-deterministic even if everything else is 100% equal.
+/// To get around this (and to preempt any bugs from tools that don't tolerate
+/// 0 timestamps very well), we use February 4, 2004 - the initial launch of thefacebook.com.
+const FIXED_MTIME: u64 = 1075852800;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -48,11 +55,7 @@ struct Entry {
 impl Default for Entry {
     fn default() -> Self {
         let mut header = Header::new_ustar();
-        // Timestamps make things non-deterministic even if everything else is
-        // 100% equal. To get around this (and to preempty any bugs from tools
-        // that don't tolerate 0 timestamps very well), choose an arbitrary time
-        // of February 4 2004, the initial launch of thefacebook.com
-        header.set_mtime(1075852800);
+        header.set_mtime(FIXED_MTIME);
         Self {
             header,
             contents: Contents::Unset,
@@ -240,7 +243,18 @@ fn main() -> Result<()> {
                         builder.append_link(&mut entry.header, path, target)?;
                     }
                     Contents::File(mut f) => {
-                        builder.append_file(path, &mut f)?;
+                        // Stream file contents instead of loading into memory to handle
+                        // large files. We manually set entry type to Regular (not Sparse)
+                        // to avoid GNU sparse headers (type 'S' = 83) which some container
+                        // runtimes (podman/skopeo) cannot handle.
+                        // Use the accumulated entry.header which contains metadata from
+                        // change stream operations (Create, Chmod, Chown, etc.)
+                        // Seek to beginning in case file handle is not at start
+                        f.rewind()?;
+                        let metadata = f.metadata()?;
+                        entry.header.set_size(metadata.len());
+                        entry.header.set_entry_type(EntryType::Regular);
+                        builder.append_data(&mut entry.header, path, &mut f)?;
                         drop(f);
                     }
                     Contents::Unset => {
@@ -249,12 +263,23 @@ fn main() -> Result<()> {
                         // layer.
                         let meta = std::fs::symlink_metadata(args.child.join(&path))?;
                         if meta.is_file() {
+                            // Stream file contents instead of loading into memory to handle
+                            // large files. We manually set entry type to Regular (not Sparse)
+                            // to avoid GNU sparse headers (type 'S' = 83) which some container
+                            // runtimes (podman/skopeo) cannot handle.
+                            // Use entry.header which contains metadata from change stream
+                            // operations (Chmod, Chown, etc.) and only set the size.
                             let mut f = File::open(args.child.join(&path))?;
-                            builder.append_file(path, &mut f)?;
+                            let f_meta = f.metadata()?;
+                            entry.header.set_size(f_meta.len());
+                            entry.header.set_entry_type(EntryType::Regular);
+                            builder.append_data(&mut entry.header, path, &mut f)?;
                         } else if meta.is_dir() {
+                            // For metadata-only directory changes, ensure entry type is set
                             entry.header.set_entry_type(EntryType::Directory);
                             builder.append_data(&mut entry.header, path, std::io::empty())?;
                         } else if meta.is_symlink() {
+                            // For metadata-only symlink changes, ensure entry type is set
                             entry.header.set_entry_type(EntryType::Symlink);
                             let target = std::fs::read_link(args.child.join(&path))?;
                             builder.append_link(&mut entry.header, path, target)?;
