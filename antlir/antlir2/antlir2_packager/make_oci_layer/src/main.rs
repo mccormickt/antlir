@@ -124,27 +124,37 @@ fn main() -> Result<()> {
     // separately track which paths had times set, so we can see if *only* the
     // times were updated and skip those entries
     let mut had_set_times: HashSet<PathBuf> = HashSet::new();
+    // Track pending whiteout markers - only write them at the end if the file wasn't recreated
+    let mut pending_whiteouts: HashSet<PathBuf> = HashSet::new();
 
     for change in stream {
         let change = change?;
         let path = change.path().to_owned();
         match change.into_operation() {
             Operation::Create { mode } => {
+                // File is being created - remove from pending whiteouts if present
+                pending_whiteouts.remove(&path);
                 let header = &mut entries.entry(path)?.header;
                 header.set_mode(mode);
                 header.set_entry_type(EntryType::Regular);
             }
             Operation::Mkdir { mode } => {
+                // Directory is being created - remove from pending whiteouts if present
+                pending_whiteouts.remove(&path);
                 let header = &mut entries.entry(path)?.header;
                 header.set_mode(mode);
                 header.set_entry_type(EntryType::Directory);
             }
             Operation::Mkfifo { mode } => {
+                // FIFO is being created - remove from pending whiteouts if present
+                pending_whiteouts.remove(&path);
                 let header = &mut entries.entry(path)?.header;
                 header.set_mode(mode);
                 header.set_entry_type(EntryType::Fifo);
             }
             Operation::Mknod { rdev, mode } => {
+                // Device node is being created - remove from pending whiteouts if present
+                pending_whiteouts.remove(&path);
                 let header = &mut entries.entry(path)?.header;
                 header.set_mode(mode);
                 let sflag = SFlag::from_bits_truncate(mode);
@@ -157,10 +167,14 @@ fn main() -> Result<()> {
                 header.set_device_minor(minor(rdev) as u32)?;
             }
             Operation::Chmod { mode } => {
+                // Permissions are being modified - file still exists, remove from pending whiteouts
+                pending_whiteouts.remove(&path);
                 let header = &mut entries.entry(path)?.header;
                 header.set_mode(mode);
             }
             Operation::Chown { uid, gid } => {
+                // Ownership is being modified - file still exists, remove from pending whiteouts
+                pending_whiteouts.remove(&path);
                 let header = &mut entries.entry(path)?.header;
                 header.set_uid(uid as u64);
                 header.set_gid(gid as u64);
@@ -170,31 +184,43 @@ fn main() -> Result<()> {
                 had_set_times.insert(path.clone());
             }
             Operation::HardLink { target } => {
+                // Link is being created - remove from pending whiteouts if present
+                pending_whiteouts.remove(&path);
                 let entry = entries.entry(path)?;
                 entry.header.set_entry_type(EntryType::Link);
                 entry.contents = Contents::Link(target.to_owned());
             }
             Operation::Symlink { target } => {
+                // Symlink is being created - remove from pending whiteouts if present
+                pending_whiteouts.remove(&path);
                 let entry = entries.entry(path)?;
                 entry.header.set_entry_type(EntryType::Symlink);
                 entry.contents = Contents::Link(target.to_owned());
             }
             Operation::Rename { to: _ } => {
+                // File is being renamed (recreated) - remove from pending whiteouts if present
+                pending_whiteouts.remove(&path);
                 // just ensure an entry exists, which will end up sending the
                 // full contents, since there is no way to represent a rename in
                 // the layer tar
                 entries.entry(path)?;
             }
             Operation::Contents { contents } => {
+                // File contents are being set - remove from pending whiteouts if present
+                pending_whiteouts.remove(&path);
                 let entry = entries.entry(path)?;
                 entry.contents = Contents::File(contents);
             }
             Operation::RemoveXattr { .. } => {
+                // Xattr is being modified - remove from pending whiteouts if present
+                pending_whiteouts.remove(&path);
                 // just ensure an entry exists, which will end up sending the
                 // full contents
                 entries.entry(path)?;
             }
             Operation::SetXattr { name, value } => {
+                // Xattr is being set - remove from pending whiteouts if present
+                pending_whiteouts.remove(&path);
                 let entry = entries.entry(path)?;
                 let mut key = "SCHILY.xattr.".to_owned();
                 key.push_str(
@@ -204,12 +230,10 @@ fn main() -> Result<()> {
                 entry.extensions.push((key, value))
             }
             // Removals are represented with special whiteout marker files
+            // We defer writing them until the end to handle the case where
+            // a file is deleted and then recreated in the same layer
             Operation::Unlink | Operation::Rmdir => {
-                let mut wh_name = OsString::from(".wh.");
-                wh_name.push(path.file_name().expect("root dir cannot be deleted"));
-                let wh_path = path.parent().unwrap_or(Path::new("")).join(wh_name);
-                let mut entry = Entry::default();
-                builder.append_data(&mut entry.header, wh_path, std::io::empty())?;
+                pending_whiteouts.insert(path.clone());
             }
             Operation::Close => {
                 // we're done with an entry file, it can go into the tar now
@@ -224,6 +248,10 @@ fn main() -> Result<()> {
                         bail!("{path:?} was closed but never opened")
                     }
                 };
+
+                // If this file was marked for deletion (whiteout) but is now being
+                // recreated, remove it from pending whiteouts
+                pending_whiteouts.remove(&path);
 
                 if path == Path::new("") {
                     // empty path (root) can't go into the tar
@@ -293,6 +321,31 @@ fn main() -> Result<()> {
                 }
             }
         }
+    }
+
+    // Write all pending whiteout markers for files that were deleted and not recreated.
+    // Skip redundant nested whiteouts - if a parent directory is being deleted,
+    // we don't need whiteout markers for its children.
+    for wh_path in &pending_whiteouts {
+        // Check if any ancestor of this path is also being deleted
+        let has_deleted_ancestor = wh_path
+            .ancestors()
+            .skip(1) // Skip the path itself
+            .any(|ancestor| pending_whiteouts.contains(ancestor));
+
+        if has_deleted_ancestor {
+            // Parent directory is being deleted, so this child whiteout is redundant
+            continue;
+        }
+
+        let mut wh_name = OsString::from(".wh.");
+        wh_name.push(wh_path.file_name().expect("root dir cannot be deleted"));
+        let wh_full_path = wh_path.parent().unwrap_or(Path::new("")).join(wh_name);
+        let mut header = Header::new_ustar();
+        header.set_mtime(FIXED_MTIME);
+        header.set_mode(0o644);
+        header.set_entry_type(EntryType::Regular);
+        builder.append_data(&mut header, wh_full_path, std::io::empty())?;
     }
 
     ensure!(
