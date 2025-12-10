@@ -61,3 +61,76 @@ image_python_test(
     # @oss-disable
     layer = ":test-layer",
 )
+
+# Test parent directory ownership preservation across layers in OCI archives.
+# Parent layer establishes custom ownership, child layer adds subdirectories.
+
+image.layer(
+    name = "parent-layer-with-custom-user",
+    features = [
+        feature.rpms_install(rpms = [
+            "bash",
+            "coreutils",
+        ]),
+        feature.group_add(
+            groupname = "foogroup",
+            uidmap = "antlir",
+        ),
+        feature.user_add(
+            home_dir = "/var/foouser",
+            primary_group = "foogroup",
+            shell = "/bin/bash",
+            uidmap = "antlir",
+            username = "foouser",
+        ),
+        feature.ensure_dirs_exist(
+            dirs = "/var/foouser",
+            group = "foogroup",
+            mode = "u+rwx,g+rx,o+rx",
+            user = "foouser",
+        ),
+    ],
+)
+
+image.layer(
+    name = "child-layer-with-subdirs",
+    features = [
+        feature.ensure_dirs_exist(
+            dirs = "/var/foouser/subdir",
+            group = "foogroup",
+            mode = "u+rwx,g+rx,o+rx",
+            user = "foouser",
+        ),
+        feature.ensure_dirs_exist(
+            dirs = "/var/foouser/another",
+            group = "foogroup",
+            mode = "u+rwx,g+rx,o+rx",
+            user = "foouser",
+        ),
+        feature.rpms_install(rpms = [
+            "bash",
+            "coreutils",
+        ]),
+    ],
+    parent_layer = ":parent-layer-with-custom-user",
+)
+
+docker_archive(
+    name = "parent-ownership-docker-archive",
+    entrypoint = [],
+    layer = ":child-layer-with-subdirs",
+)
+
+image_python_test(
+    name = "test-parent-ownership",
+    srcs = ["test_parent_ownership.py"],
+    env = {
+        "DOCKER_ARCHIVE": "$(location :parent-ownership-docker-archive)",
+    },
+    exec_compatible_with = select({
+        "ovr_config//cpu:arm64": ["ovr_config//cpu:arm64"],
+        "ovr_config//cpu:x86_64": ["ovr_config//cpu:x86_64"],
+    }),
+    # @oss-disable
+    layer = ":test-layer",
+)
