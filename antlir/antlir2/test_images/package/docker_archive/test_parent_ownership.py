@@ -9,7 +9,6 @@
 import os
 import re
 import subprocess
-import unittest
 from pathlib import Path
 from subprocess import CalledProcessError
 from unittest import TestCase
@@ -39,7 +38,6 @@ class TestParentOwnership(TestCase):
         self.assertIsNotNone(image_id)
         return image_id
 
-    @unittest.expectedFailure
     def test_parent_directory_ownership(self) -> None:
         """
         Verify that parent directories with custom ownership from parent layers
@@ -51,10 +49,6 @@ class TestParentOwnership(TestCase):
         - Child layer: Creates /var/foouser/subdir and /var/foouser/another
 
         Expected: /var/foouser retains foouser:foogroup ownership in final image
-
-        This test currently fails due to a bug where parent directories that exist
-        in parent layers but are not modified in child layers lose their custom
-        ownership and revert to root:root when subdirectories are created.
         """
         image_id = self.load_image()
 

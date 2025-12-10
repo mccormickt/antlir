@@ -126,6 +126,8 @@ fn main() -> Result<()> {
     let mut had_set_times: HashSet<PathBuf> = HashSet::new();
     // Track pending whiteout markers - only write them at the end if the file wasn't recreated
     let mut pending_whiteouts: HashSet<PathBuf> = HashSet::new();
+    // Track which paths were ACTUALLY written to the tar (not just closed)
+    let mut written_to_tar: HashSet<PathBuf> = HashSet::new();
 
     for change in stream {
         let change = change?;
@@ -258,6 +260,9 @@ fn main() -> Result<()> {
                     continue;
                 }
 
+                // Save path for tracking before it gets moved
+                let path_for_tracking = path.clone();
+
                 // PAX extensions go ahead of the full entry header
                 entry.extensions.sort();
                 builder.append_pax_extensions(
@@ -286,7 +291,9 @@ fn main() -> Result<()> {
                         #[cfg(unix)]
                         {
                             use std::os::unix::fs::PermissionsExt;
-                            entry.header.set_mode(metadata.permissions().mode() & 0o7777);
+                            entry
+                                .header
+                                .set_mode(metadata.permissions().mode() & 0o7777);
                         }
                         entry.header.set_size(metadata.len());
                         entry.header.set_entry_type(EntryType::Regular);
@@ -335,7 +342,61 @@ fn main() -> Result<()> {
                         }
                     }
                 }
+                // Track that this path was actually written to the tar
+                written_to_tar.insert(path_for_tracking);
             }
+        }
+    }
+
+    // Add missing parent directories to the tar.
+    // When creating subdirectories, parent directories may exist in the child layer
+    // (inherited from parent layers with custom ownership) but don't appear in the
+    // btrfs send stream if they weren't modified. Container runtimes implicitly create
+    // missing parents as root:root, losing the correct ownership from parent layers.
+    // Solution: Explicitly include all parent directories from the child layer.
+    let initial_paths: Vec<PathBuf> = written_to_tar.iter().cloned().collect();
+    let mut written_paths: HashSet<PathBuf> = written_to_tar.clone();
+    let mut parents_to_add: Vec<PathBuf> = Vec::new();
+
+    for path in &initial_paths {
+        let mut current_parent = path.parent();
+        while let Some(parent) = current_parent {
+            if parent == Path::new("") {
+                break;
+            }
+            // If parent wasn't written to tar but exists in child layer, we need to add it
+            // Strip leading slash from parent path before joining to child layer path
+            let parent_relative = parent.strip_prefix("/").unwrap_or(parent);
+            let parent_in_child = args.child.join(parent_relative);
+
+            if !written_paths.contains(parent) && parent_in_child.exists() {
+                parents_to_add.push(parent.to_owned());
+                written_paths.insert(parent.to_owned());
+            }
+            current_parent = parent.parent();
+        }
+    }
+
+    // Write parent directories to tar with their metadata from the child layer
+    // Sort parents so shallower paths (fewer components) come first - this ensures
+    // we write parents before children in the tar, which helps with metadata preservation
+    parents_to_add.sort_by(|a, b| a.components().count().cmp(&b.components().count()));
+
+    for parent_path in parents_to_add {
+        // Strip leading slash before joining to child layer path
+        let parent_relative = parent_path.strip_prefix("/").unwrap_or(&parent_path);
+        let full_path = args.child.join(parent_relative);
+        let meta = std::fs::symlink_metadata(&full_path)?;
+
+        if meta.is_dir() {
+            use std::os::unix::fs::MetadataExt;
+            let mut header = Header::new_ustar();
+            header.set_mtime(FIXED_MTIME);
+            header.set_mode(meta.mode());
+            header.set_uid(meta.uid() as u64);
+            header.set_gid(meta.gid() as u64);
+            header.set_entry_type(EntryType::Directory);
+            builder.append_data(&mut header, &parent_path, std::io::empty())?;
         }
     }
 
