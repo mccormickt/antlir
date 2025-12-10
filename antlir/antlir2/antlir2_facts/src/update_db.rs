@@ -86,7 +86,7 @@ fn populate_files(tx: &mut Transaction, root: &Path) -> anyhow::Result<()> {
         let fact = if entry.file_type().is_dir() {
             DirEntry::Directory(common.into())
         } else if entry.file_type().is_symlink() {
-            let raw_target = std::fs::read_link(&full_path)
+            let raw_target = std::fs::read_link(full_path)
                 .with_context(|| format!("while reading raw link {}", full_path.display()))?;
             DirEntry::Symlink(Symlink::new(common, raw_target))
         } else if entry.file_type().is_file() {
