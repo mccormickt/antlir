@@ -1,3 +1,8 @@
+# @oss-disable
+load("//antlir/antlir2/bzl/feature:defs.bzl", "feature")
+load("//antlir/antlir2/bzl/image:defs.bzl", "image")
+load("//antlir/antlir2/bzl/package:docker_archive.bzl", "docker_archive")
+load("//antlir/antlir2/testing:image_test.bzl", "image_python_test")
 load("//antlir/bzl:build_defs.bzl", "rust_binary")
 
 oncall("antlir")
@@ -14,4 +19,84 @@ rust_binary(
         "//antlir/antlir2/antlir2_change_stream:antlir2_change_stream",
         "//antlir/antlir2/antlir2_rootless:antlir2_rootless",
     ],
+)
+
+# Test file permissions preservation in OCI layer tars.
+# When files have metadata-only changes (e.g., xattr modifications) without
+# content changes, their filesystem permissions must be preserved in the
+# generated OCI layer tar archive.
+
+image.layer(
+    name = "parent-layer-with-permissions",
+    features = [
+        feature.rpms_install(rpms = [
+            "attr",
+            "bash",
+            "coreutils",
+        ]),
+        # Create files with specific permissions
+        feature.install_text(
+            dst = "/test_file.sh",
+            mode = 0o755,
+            text = "#!/bin/bash\necho test\n",
+        ),
+        feature.install_text(
+            dst = "/readonly.txt",
+            mode = 0o444,
+            text = "readonly content\n",
+        ),
+        feature.install_text(
+            dst = "/private.txt",
+            mode = 0o600,
+            text = "private content\n",
+        ),
+    ],
+)
+
+image.layer(
+    name = "child-layer-with-metadata-change",
+    features = [
+        # Add xattr to files (metadata-only change)
+        # This simulates the scenario where permissions from the filesystem
+        # need to be preserved when only metadata changes
+        feature.genrule(
+            bash = """
+                setfattr -n user.test -v test_value /test_file.sh
+                setfattr -n user.test -v test_value /readonly.txt
+                setfattr -n user.test -v test_value /private.txt
+            """,
+            user = "root",
+        ),
+    ],
+    parent_layer = ":parent-layer-with-permissions",
+)
+
+docker_archive(
+    name = "file-permissions-docker-archive",
+    entrypoint = [],
+    layer = ":child-layer-with-metadata-change",
+)
+
+image.layer(
+    name = "test-layer",
+    features = [
+        feature.rpms_install(rpms = [
+            "podman",
+            "python3",
+        ]),
+    ],
+)
+
+image_python_test(
+    name = "test-file-permissions",
+    srcs = ["tests/test_file_permissions.py"],
+    env = {
+        "DOCKER_ARCHIVE": "$(location :file-permissions-docker-archive)",
+    },
+    exec_compatible_with = select({
+        "ovr_config//cpu:arm64": ["ovr_config//cpu:arm64"],
+        "ovr_config//cpu:x86_64": ["ovr_config//cpu:x86_64"],
+    }),
+    # @oss-disable
+    layer = ":test-layer",
 )
