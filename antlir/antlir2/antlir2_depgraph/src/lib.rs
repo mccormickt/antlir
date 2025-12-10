@@ -318,7 +318,8 @@ impl GraphBuilder {
     fn verify_no_missing_deps(&self) -> Result<()> {
         // TODO: we can easily detect multiple errors, but the interface in this
         // crate is to only return one, so just limit it to one error
-        let x = match self
+
+        match self
             .db
             .as_ref()
             .prepare(
@@ -366,8 +367,7 @@ impl GraphBuilder {
                     })
                 },
                 _ => Ok(())
-            };
-        x
+            }
     }
 
     fn verify_no_invalid_deps(&self) -> Result<()> {
