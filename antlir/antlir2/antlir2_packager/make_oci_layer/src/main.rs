@@ -296,9 +296,17 @@ fn main() -> Result<()> {
                             // to avoid GNU sparse headers (type 'S' = 83) which some container
                             // runtimes (podman/skopeo) cannot handle.
                             // Use entry.header which contains metadata from change stream
-                            // operations (Chmod, Chown, etc.) and only set the size.
+                            // operations (Chmod, Chown, etc.), but also preserve permissions
+                            // from filesystem if not already set.
                             let mut f = File::open(args.child.join(&path))?;
                             let f_meta = f.metadata()?;
+                            // Preserve permissions from filesystem. On Unix, mode() includes
+                            // file type bits, so mask with 0o7777 to get just permission bits.
+                            #[cfg(unix)]
+                            {
+                                use std::os::unix::fs::PermissionsExt;
+                                entry.header.set_mode(f_meta.permissions().mode() & 0o7777);
+                            }
                             entry.header.set_size(f_meta.len());
                             entry.header.set_entry_type(EntryType::Regular);
                             builder.append_data(&mut entry.header, path, &mut f)?;
