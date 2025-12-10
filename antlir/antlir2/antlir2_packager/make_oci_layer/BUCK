@@ -100,3 +100,73 @@ image_python_test(
     # @oss-disable
     layer = ":test-layer",
 )
+
+# Test file permissions preservation for files with content changes.
+# This tests the Contents::File code path where file content is modified,
+# not just metadata. This complements the metadata-only tests above.
+
+image.layer(
+    name = "parent-layer-with-content",
+    features = [
+        feature.rpms_install(rpms = [
+            "bash",
+            "coreutils",
+        ]),
+        # Create files with specific permissions that will have content changes
+        feature.install_text(
+            dst = "/executable.sh",
+            mode = 0o755,
+            text = "#!/bin/bash\necho original\n",
+        ),
+        feature.install_text(
+            dst = "/config.conf",
+            mode = 0o644,
+            text = "setting=original\n",
+        ),
+        feature.install_text(
+            dst = "/secret.key",
+            mode = 0o600,
+            text = "original-secret\n",
+        ),
+    ],
+)
+
+image.layer(
+    name = "child-layer-with-content-change",
+    features = [
+        # Modify file content (not just metadata) to trigger Contents::File path
+        feature.genrule(
+            bash = """
+                echo '#!/bin/bash' > /executable.sh
+                echo 'echo modified' >> /executable.sh
+                chmod 755 /executable.sh
+                echo 'setting=modified' > /config.conf
+                chmod 644 /config.conf
+                echo 'modified-secret' > /secret.key
+                chmod 600 /secret.key
+            """,
+            user = "root",
+        ),
+    ],
+    parent_layer = ":parent-layer-with-content",
+)
+
+docker_archive(
+    name = "file-permissions-content-change-docker-archive",
+    entrypoint = [],
+    layer = ":child-layer-with-content-change",
+)
+
+image_python_test(
+    name = "test-file-permissions-content-change",
+    srcs = ["tests/test_file_permissions_content_change.py"],
+    env = {
+        "DOCKER_ARCHIVE": "$(location :file-permissions-content-change-docker-archive)",
+    },
+    exec_compatible_with = select({
+        "ovr_config//cpu:arm64": ["ovr_config//cpu:arm64"],
+        "ovr_config//cpu:x86_64": ["ovr_config//cpu:x86_64"],
+    }),
+    # @oss-disable
+    layer = ":test-layer",
+)
