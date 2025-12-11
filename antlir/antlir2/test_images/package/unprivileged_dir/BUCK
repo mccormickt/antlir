@@ -1,0 +1,32 @@
+load("//antlir/antlir2/bzl/feature:defs.bzl", "feature")
+load("//antlir/antlir2/bzl/image:defs.bzl", "image")
+load("//antlir/antlir2/bzl/package:defs.bzl", "package")
+load("//antlir/antlir2/testing:image_test.bzl", "image_python_test")
+
+oncall("antlir")
+
+package.unprivileged_dir(
+    name = "test.unprivileged_dir",
+    layer = "//antlir/antlir2/test_images/package:standard",
+)
+
+image.layer(
+    name = "test-layer",
+    features = [
+        feature.install(
+            src = ":test.unprivileged_dir",
+            dst = "/unprivileged_dir",
+        ),
+        feature.rpms_install(rpms = [
+            "bash",
+            "coreutils",
+        ]),
+    ],
+)
+
+image_python_test(
+    name = "test-unprivileged_dir",
+    srcs = ["test_unprivileged_dir.py"],
+    layer = ":test-layer",
+    deps = ["//later:lib"],
+)
