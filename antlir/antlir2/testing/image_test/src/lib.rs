@@ -8,11 +8,18 @@
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::ffi::OsString;
+use std::fs::File;
+use std::fs::OpenOptions;
+use std::os::fd::AsRawFd;
+use std::os::fd::FromRawFd;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use anyhow::Context;
+use anyhow::Result;
 use clap::Parser;
+use tempfile::NamedTempFile;
 use thiserror::Error;
 
 #[derive(Parser, Clone, Debug)]
@@ -222,6 +229,112 @@ impl KvPair {
         value.push(&self.value);
         value.push(OsStr::new("'"));
         value
+    }
+}
+
+/// A file that tpx will upload as an artifact on failing test instances. If not
+/// run under tpx, this will be some other fd (a regular file in /tmp, stderr, etc)
+pub struct TpxArtifact {
+    file: LogFile,
+    path: PathBuf,
+}
+
+enum LogFile {
+    Stderr,
+    File(File),
+    Tmp(NamedTempFile),
+}
+
+impl TpxArtifact {
+    /// Create a file to record additional text logs into. When invoked under
+    /// tpx, this will be uploaded as an artifact. The artifact metadata is set
+    /// up before running the test so that it still gets uploaded even in case
+    /// of a timeout.
+    /// If not running under tpx, this will be sent to stderr
+    fn new_tpx_or_none(name: &str) -> Result<Option<Self>> {
+        // if tpx has provided this artifacts dir, put the logs there so they get
+        // uploaded along with the test results
+        if let Some(artifacts_dir) = std::env::var_os("TEST_RESULT_ARTIFACTS_DIR") {
+            std::fs::create_dir_all(&artifacts_dir).with_context(|| {
+                format!("while creating artifacts dir {}", artifacts_dir.display())
+            })?;
+            let dst = Path::new(&artifacts_dir).join(name);
+            if let Some(annotations_dir) = std::env::var_os("TEST_RESULT_ARTIFACT_ANNOTATIONS_DIR")
+            {
+                std::fs::create_dir_all(&annotations_dir)?;
+                std::fs::write(
+                    Path::new(&annotations_dir).join(format!("{name}.annotation")),
+                    r#"{"type": {"generic_text_log": {}}, "description": "test logs"}"#,
+                )?;
+            }
+            let file = OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .read(true)
+                .write(true)
+                .open(&dst)
+                .with_context(|| format!("while creating {}", dst.display()))?;
+            Ok(Some(Self {
+                file: LogFile::File(file),
+                path: dst,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Create a file to record additional text logs into. When invoked under
+    /// tpx, this will be uploaded as an artifact. The artifact metadata is set
+    /// up before running the test so that it still gets uploaded even in case
+    /// of a timeout.
+    /// If not running under tpx, this will be sent to a temporary file.
+    pub fn new_log_file(name: &str) -> Result<Self> {
+        match Self::new_tpx_or_none(name)? {
+            Some(s) => Ok(s),
+            None => {
+                let tmpfile = tempfile::NamedTempFile::new()?;
+                Ok(Self {
+                    path: tmpfile.path().to_owned(),
+                    file: LogFile::Tmp(tmpfile),
+                })
+            }
+        }
+    }
+
+    /// Same as [TpxArtifact::new_log_file], but if not running under tpx, this
+    /// will be sent to stderr
+    pub fn new_log_file_or_stderr(name: &str) -> Result<Self> {
+        match Self::new_tpx_or_none(name)? {
+            Some(s) => Ok(s),
+            None => Ok(Self {
+                file: LogFile::Stderr,
+                path: "/dev/stderr".into(),
+            }),
+        }
+    }
+
+    pub fn as_file(&self) -> std::io::Result<File> {
+        match &self.file {
+            LogFile::Stderr => Ok(unsafe { File::from_raw_fd(std::io::stderr().as_raw_fd()) }),
+            LogFile::File(f) => f.try_clone(),
+            LogFile::Tmp(f) => f.as_file().try_clone(),
+        }
+    }
+
+    pub fn into_file(self) -> File {
+        match self.file {
+            LogFile::Stderr => unsafe { File::from_raw_fd(std::io::stderr().as_raw_fd()) },
+            LogFile::File(f) => f,
+            LogFile::Tmp(f) => f.into_file(),
+        }
+    }
+
+    pub fn is_stderr(&self) -> bool {
+        matches!(self.file, LogFile::Stderr)
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 }
 

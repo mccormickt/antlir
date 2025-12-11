@@ -7,11 +7,9 @@
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use std::fs::File;
 use std::fs::Permissions;
+use std::io::Seek;
 use std::io::Write;
-use std::os::fd::AsRawFd;
-use std::os::fd::FromRawFd;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
@@ -27,16 +25,13 @@ use anyhow::Result;
 use anyhow::ensure;
 use bon::builder;
 use image_test_lib::Test;
+use image_test_lib::TpxArtifact;
 use tempfile::NamedTempFile;
 use tracing::debug;
 use tracing::trace;
 
 use crate::exec;
 use crate::runtime;
-
-fn make_log_files(_base: &str) -> Result<(NamedTempFile, NamedTempFile)> {
-    Ok((NamedTempFile::new()?, NamedTempFile::new()?))
-}
 
 #[builder]
 pub(crate) fn run(
@@ -143,8 +138,9 @@ pub(crate) fn run(
 
     match spec.boot {
         Some(boot) => {
-            let container_stdout = container_stdout_file()?;
-            let (mut test_stdout, mut test_stderr) = make_log_files("test")?;
+            let container_stdout = TpxArtifact::new_log_file_or_stderr("container-stdout.txt")?;
+            let test_stdout = TpxArtifact::new_log_file("test-stdout.txt")?;
+            let test_stderr = TpxArtifact::new_log_file("test-stderr.txt")?;
 
             let mut test_unit_dropin = NamedTempFile::new()?;
             writeln!(test_unit_dropin, "[Unit]")?;
@@ -255,18 +251,22 @@ pub(crate) fn run(
                 .context("while spawning systemd-nspawn")?;
             let res = child.wait().context("while waiting for systemd-nspawn")?;
 
+            let mut test_stdout = test_stdout.into_file();
+            let mut test_stderr = test_stderr.into_file();
+            test_stdout.rewind()?;
+            test_stderr.rewind()?;
             std::io::copy(&mut test_stdout, &mut std::io::stdout())?;
             std::io::copy(&mut test_stderr, &mut std::io::stderr())?;
 
             if !res.success() {
                 // if the container stdout is not already being dumped to
                 // stdout/err, then print out the path where it can be found
-                if let ContainerConsoleOutput::File { path, .. } = &container_stdout {
+                if !container_stdout.is_stderr() {
                     eprintln!(
                         "full container console output can be found at: '{}'",
-                        path.display()
+                        container_stdout.path().display()
                     );
-                    eprintln!("{}", path.display());
+                    eprintln!("{}", container_stdout.path().display());
                 }
                 std::process::exit(res.code().unwrap_or(255))
             } else {
@@ -287,44 +287,5 @@ pub(crate) fn run(
             debug!("executing test in isolated container: {isol:?}");
             Err(anyhow::anyhow!("failed to exec test: {:?}", isol.exec()))
         }
-    }
-}
-
-enum ContainerConsoleOutput {
-    File { path: PathBuf, file: File },
-    Stderr,
-}
-
-impl ContainerConsoleOutput {
-    fn as_file(&self) -> Result<File> {
-        match self {
-            Self::File { file, .. } => file.try_clone().context("while cloning file fd"),
-            Self::Stderr => Ok(unsafe { File::from_raw_fd(std::io::stderr().as_raw_fd()) }),
-        }
-    }
-}
-
-/// Create a file to record container stdout into. When invoked under tpx, this
-/// will be uploaded as an artifact. The artifact metadata is set up before
-/// running the test so that it still gets uploaded even in case of a timeout
-fn container_stdout_file() -> Result<ContainerConsoleOutput> {
-    // if tpx has provided this artifacts dir, put the logs there so they get
-    // uploaded along with the test results
-    if let Some(artifacts_dir) = std::env::var_os("TEST_RESULT_ARTIFACTS_DIR") {
-        std::fs::create_dir_all(&artifacts_dir)?;
-        let dst = Path::new(&artifacts_dir).join("container-stdout.txt");
-        if let Some(annotations_dir) = std::env::var_os("TEST_RESULT_ARTIFACT_ANNOTATIONS_DIR") {
-            std::fs::create_dir_all(&annotations_dir)?;
-            std::fs::write(
-                Path::new(&annotations_dir).join("container-stdout.txt.annotation"),
-                r#"{"type": {"generic_text_log": {}}, "description": "systemd logs"}"#,
-            )?;
-        }
-        File::create(&dst)
-            .with_context(|| format!("while creating {}", dst.display()))
-            .map(|file| ContainerConsoleOutput::File { path: dst, file })
-    } else {
-        // otherwise, have it go right to stderr
-        Ok(ContainerConsoleOutput::Stderr)
     }
 }
