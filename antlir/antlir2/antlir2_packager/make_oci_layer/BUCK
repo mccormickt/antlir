@@ -99,6 +99,7 @@ image_python_test(
     }),
     # @oss-disable
     layer = ":test-layer",
+    typing = True,
 )
 
 # Test file permissions preservation for files with content changes.
@@ -169,6 +170,7 @@ image_python_test(
     }),
     # @oss-disable
     layer = ":test-layer",
+    typing = True,
 )
 
 # Test directory metadata changes handling in OCI layers.
@@ -234,4 +236,5 @@ image_python_test(
     }),
     # @oss-disable
     layer = ":test-layer",
+    typing = True,
 )
