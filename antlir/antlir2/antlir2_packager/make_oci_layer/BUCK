@@ -170,3 +170,68 @@ image_python_test(
     # @oss-disable
     layer = ":test-layer",
 )
+
+# Test directory metadata changes handling in OCI layers.
+# When directories have metadata-only changes (chown, chmod, set_times, xattrs),
+# the change stream must emit proper Close operations. Without Close operations,
+# make_oci_layer fails with "not all entries were closed" error.
+# This test ensures directories with metadata changes are properly handled.
+
+image.layer(
+    name = "parent-layer-with-directories",
+    features = [
+        feature.rpms_install(rpms = [
+            "attr",
+            "bash",
+            "coreutils",
+        ]),
+        # Create directories with initial permissions and ownership
+        feature.ensure_dirs_exist(dirs = "/var/cache/testdir"),
+        feature.ensure_dirs_exist(dirs = "/var/lib/testdata"),
+        feature.ensure_dirs_exist(dirs = "/opt/app"),
+    ],
+)
+
+image.layer(
+    name = "child-layer-with-directory-metadata-changes",
+    features = [
+        # Modify directory metadata (not file metadata) - this is the critical difference
+        # from the file permission tests. This exercises the directory Close operation
+        # code path to ensure directories with metadata changes are properly handled.
+        feature.genrule(
+            bash = """
+                # Change directory permissions (chmod on directory)
+                chmod 700 /var/cache/testdir
+
+                # Change directory ownership (chown on directory)
+                # Using numeric IDs to avoid dependency on user existence
+                chown 1000:1000 /var/lib/testdata
+
+                # Add xattr to directory (xattr on directory)
+                setfattr -n user.app -v production /opt/app
+            """,
+            user = "root",
+        ),
+    ],
+    parent_layer = ":parent-layer-with-directories",
+)
+
+docker_archive(
+    name = "directory-metadata-changes-docker-archive",
+    entrypoint = [],
+    layer = ":child-layer-with-directory-metadata-changes",
+)
+
+image_python_test(
+    name = "test-directory-metadata-changes",
+    srcs = ["tests/test_directory_metadata_changes.py"],
+    env = {
+        "DOCKER_ARCHIVE": "$(location :directory-metadata-changes-docker-archive)",
+    },
+    exec_compatible_with = select({
+        "ovr_config//cpu:arm64": ["ovr_config//cpu:arm64"],
+        "ovr_config//cpu:x86_64": ["ovr_config//cpu:x86_64"],
+    }),
+    # @oss-disable
+    layer = ":test-layer",
+)
