@@ -67,6 +67,8 @@ _RPMS_THAT_CAN_FAIL_SCRIPTS = {
     "nsight-compute-2019.4.0": "TODO(T166170831)",
     "coreutils-common": "TODO(T182347179)",
     "mono-core": "TODO(T206575712)",
+    "digilent.waveforms": "TODO(T248331993)",
+    "digilent.adept.runtime": "TODO(T248331993)",
 }
 
 
