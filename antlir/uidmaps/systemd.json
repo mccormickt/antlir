@@ -1,0 +1,12 @@
+{
+    "users": {
+        "systemd-timesync": {
+            "uid": 996
+        }
+    },
+    "groups": {
+        "systemd-timesync": {
+            "gid": 996
+        }
+    }
+}
