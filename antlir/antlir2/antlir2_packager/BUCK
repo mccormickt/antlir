@@ -17,6 +17,7 @@ rust_binary(
     visibility = ["PUBLIC"],
     deps = [
         "anyhow",
+        "base64",
         "blake3",
         "bytesize",
         "cap-std",

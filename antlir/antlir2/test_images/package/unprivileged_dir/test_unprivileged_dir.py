@@ -5,7 +5,6 @@
 
 # pyre-strict
 
-import importlib.resources
 import os
 import os.path
 import stat

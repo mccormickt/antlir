@@ -5,39 +5,17 @@
 
 load("//antlir/antlir2/bzl:platform.bzl", "arch_select", "os_select")
 load("//antlir/antlir2/bzl:types.bzl", "BuildApplianceInfo", "LayerInfo")
-load("//antlir/antlir2/bzl/image:cfg.bzl", "attrs_selected_by_cfg")
-load("//antlir/antlir2/features:defs.bzl", "FeaturePluginInfo", "FeaturePluginPluginKind")
+load("//antlir/antlir2/features:defs.bzl", "FeaturePluginPluginKind")
 load("//antlir/buck2/bzl:ensure_single_output.bzl", "ensure_single_output")
 load("//antlir/bzl:internal_external.bzl", "internal_external")
+load(":attrs.bzl", "common_attrs", "default_attrs")
 load(":btrfs.bzl", "btrfs")
-load(":cfg.bzl", "layer_attrs", "package_cfg")
+load(":cfg.bzl", "package_cfg")
 load(":gpt.bzl", "GptPartitionSource", "gpt")
 load(":macro.bzl", "package_macro")
 load(":sendstream.bzl", "sendstream_v2")
 load(":stamp_buildinfo.bzl", "stamp_buildinfo_rule")
-
-# Attrs that are required by all packages
-common_attrs = {
-    "labels": attrs.list(attrs.string(), default = []),
-    "out": attrs.option(attrs.string(doc = "Output filename"), default = None),
-    "_plugins": attrs.list(
-        attrs.dep(providers = [FeaturePluginInfo]),
-        default = [],
-        doc = "Used as a way to pass plugins to anon layer targets",
-    ),
-} | layer_attrs
-
-# Attrs that are not expected for users to pass
-default_attrs = {
-    "_analyze_feature": attrs.exec_dep(default = "antlir//antlir/antlir2/antlir2_depgraph_if:analyze"),
-    "_antlir2": attrs.exec_dep(default = "antlir//antlir/antlir2/antlir2:antlir2"),
-    "_antlir2_packager": attrs.default_only(attrs.exec_dep(default = "antlir//antlir/antlir2/antlir2_packager:antlir2-packager")),
-    "_dot_meta_feature": attrs.dep(default = "antlir//antlir/antlir2/bzl/package:dot-meta", pulls_plugins = [FeaturePluginPluginKind]),
-    "_run_container": attrs.exec_dep(default = "antlir//antlir/antlir2/container_subtarget:run"),
-    "_target_arch": attrs.default_only(attrs.string(
-        default = arch_select(aarch64 = "aarch64", x86_64 = "x86_64"),
-    )),
-} | attrs_selected_by_cfg()
+load(":unprivileged_dir.bzl", "unprivileged_dir")
 
 def _generic_impl_with_layer(
         layer: [Dependency, ProviderCollection],
@@ -435,13 +413,6 @@ _ext4, _ext4_anon = _new_package_rule(
 )
 
 # @unused
-_unprivileged_dir, unprivileged_dir_anon = _new_package_rule(
-    format = "unprivileged_dir",
-    is_dir = True,
-    sudo = True,
-)
-
-# @unused
 _erofs, _erofs_anon = _new_package_rule(
     format = "erofs",
     sudo = True,
@@ -468,6 +439,6 @@ package = struct(
     tar = package_macro(_tar),
     tar_gz = package_macro(_tar_gz),
     tar_zst = package_macro(tar_zst_rule),
-    unprivileged_dir = package_macro(_unprivileged_dir),
+    unprivileged_dir = unprivileged_dir,
     vfat = package_macro(_vfat),
 )

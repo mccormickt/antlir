@@ -30,3 +30,57 @@ image_python_test(
     layer = ":test-layer",
     deps = ["//later:lib"],
 )
+
+image.layer(
+    name = "needs-escaping",
+    features = [
+        feature.ensure_dirs_exist(dirs = "/baz"),
+        feature.install_text(
+            dst = "/baz/doesnt_need_escaping",
+            text = "did not escape\n",
+        ),
+        feature.install_text(
+            dst = "foo\\x2dbar",
+            text = "baz\n",
+        ),
+        feature.ensure_dirs_exist(dirs = "/escape\\x2ddir"),
+        feature.install_text(
+            dst = "/escape\\x2ddir/component",
+            text = "works!\n",
+        ),
+        feature.ensure_dir_symlink(
+            link = "/link_to_escaped",
+            target = "/escape\\x2ddir",
+        ),
+    ],
+)
+
+package.unprivileged_dir(
+    name = "base64.unprivileged_dir",
+    base64_encode_filenames = True,
+    layer = ":needs-escaping",
+)
+
+image.layer(
+    name = "test-layer-needs-escaping",
+    features = [
+        feature.install(
+            src = ":base64.unprivileged_dir",
+            dst = "/unprivileged_dir",
+        ),
+        feature.rpms_install(rpms = [
+            "bash",
+            "coreutils",
+        ]),
+    ],
+)
+
+image_python_test(
+    name = "test-unprivileged_dir-base64-escape",
+    srcs = ["test_unprivileged_dir_base64_escape.py"],
+    layer = ":test-layer-needs-escaping",
+    resources = {
+        ":base64.unprivileged_dir[base64_encoded_path_mapping]": "escaped_paths_mapping",
+    },
+    deps = ["//later:lib"],
+)

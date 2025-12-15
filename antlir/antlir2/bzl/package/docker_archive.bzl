@@ -5,8 +5,8 @@
 
 load("//antlir/antlir2/bzl:types.bzl", "BuildApplianceInfo", "LayerInfo")
 load("//antlir/buck2/bzl:ensure_single_output.bzl", "ensure_single_output")
+load(":attrs.bzl", "common_attrs", "default_attrs")
 load(":cfg.bzl", "layer_attrs", "package_cfg")
-load(":defs.bzl", "common_attrs", "default_attrs")
 load(":macro.bzl", "package_macro")
 load(":oci.bzl", "oci_attrs", "oci_rule")
 

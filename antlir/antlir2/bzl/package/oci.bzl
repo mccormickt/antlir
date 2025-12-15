@@ -4,8 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 
 load("//antlir/antlir2/bzl:types.bzl", "LayerInfo")
+load(":attrs.bzl", "common_attrs", "default_attrs")
 load(":cfg.bzl", "layer_attrs", "package_cfg")
-load(":defs.bzl", "common_attrs", "default_attrs")
 load(":macro.bzl", "package_macro")
 
 OciLayer = record(

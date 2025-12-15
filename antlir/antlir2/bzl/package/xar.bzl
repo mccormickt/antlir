@@ -4,8 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 
 load("//antlir/antlir2/features:defs.bzl", "FeaturePluginPluginKind")
+load(":attrs.bzl", "common_attrs", "default_attrs")
 load(":cfg.bzl", "layer_attrs", "package_cfg")
-load(":defs.bzl", "common_attrs", "default_attrs", "squashfs_anon")
+load(":defs.bzl", "squashfs_anon")
 load(":macro.bzl", "package_macro")
 
 def _impl(ctx: AnalysisContext) -> list[Provider]:
