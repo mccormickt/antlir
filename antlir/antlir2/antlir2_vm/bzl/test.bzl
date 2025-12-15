@@ -238,6 +238,7 @@ def _implicit_vm_test(
         expect_failure: bool = False,
         postmortem: bool = False,
         labels: list[str] | None = None,
+        # @oss-disable
         output_dirs: list[str] | None = None,
         systemd_credentials: dict[str, str] | None = None,
         _add_outer_labels: list[str] = [],
@@ -273,6 +274,7 @@ def _implicit_vm_test(
     # @oss-disable
     # @oss-disable
     labels = ["uses_sudo"]
+    # @oss-disable
     # @oss-disable
 
     inner_test_name = name + "_vm_test_inner"
