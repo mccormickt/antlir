@@ -6,6 +6,7 @@
 # @oss-disable[end= ]: load("@fbsource//tools/build_defs:buckconfig.bzl", "read_bool")
 # @oss-disable[end= ]: load("@fbsource//tools/build_defs:feature_rollout_utils.bzl", "rollout")
 load("@prelude//:paths.bzl", "paths")
+load("@prelude//dist:dist_info.bzl", "DistInfo")
 load("@prelude//utils:expect.bzl", "expect")
 load("//antlir/antlir2/bzl:binaries_require_repo.bzl", "binaries_require_repo")
 load("//antlir/antlir2/bzl:build_phase.bzl", "BuildPhase")
@@ -214,6 +215,12 @@ shared_libraries_record = record(
     dir_name = field(str),
 )
 
+implicit_resources_record = record(
+    resources_json = field(Artifact),
+    resources_dir = field(Artifact),
+    resources_dir_name = field(str),
+)
+
 def _python_outplace_features(
         ctx: AnalysisContext,
         installed_name: str,
@@ -311,6 +318,7 @@ def _impl(ctx: AnalysisContext) -> list[Provider] | Promise:
     required_run_infos = []
     required_artifacts = []
     shared_libraries = None
+    implicit_resources = None
     if not ctx.attrs.src and ctx.attrs.text == None:
         fail("src or text must be set")
     src = ctx.attrs.src
@@ -362,6 +370,16 @@ def _impl(ctx: AnalysisContext) -> list[Provider] | Promise:
             shared_libraries = shared_libraries_record(
                 so_targets = so_targets,
                 dir_name = rpath_tree_out.basename,
+            )
+
+        # If source is a binary that set `resources = {...}`, we want to implicitly
+        # include those as well
+        maybe_dist_info = ctx.attrs.src.get(DistInfo)
+        if maybe_dist_info and maybe_dist_info.relocatable_resources_json and maybe_dist_info.relocatable_resources_contents:
+            implicit_resources = implicit_resources_record(
+                resources_json = maybe_dist_info.relocatable_resources_json,
+                resources_dir = maybe_dist_info.relocatable_resources_contents,
+                resources_dir_name = maybe_dist_info.relocatable_resources_contents.basename,
             )
 
         # Determining if a binary is standalone or not is surprisingly hard:
@@ -458,6 +476,7 @@ def _impl(ctx: AnalysisContext) -> list[Provider] | Promise:
                     setcap = ctx.attrs.setcap,
                     always_use_gnu_debuglink = ctx.attrs.always_use_gnu_debuglink,
                     shared_libraries = shared_libraries,
+                    implicit_resources = implicit_resources,
                 ),
                 required_artifacts = [src] + required_artifacts,
                 required_run_infos = required_run_infos,

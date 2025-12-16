@@ -73,6 +73,7 @@ pub struct Install {
     pub setcap: Option<String>,
     pub always_use_gnu_debuglink: bool,
     pub shared_libraries: Option<SharedLibraries>,
+    pub implicit_resources: Option<ImplicitResources>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -116,6 +117,13 @@ pub struct SharedLibrary {
 pub struct SharedLibraries {
     pub so_targets: Vec<SharedLibrary>,
     pub dir_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+pub struct ImplicitResources {
+    pub resources_json: BuckOutSource,
+    pub resources_dir: BuckOutSource,
+    pub resources_dir_name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -497,6 +505,40 @@ impl antlir2_compile::CompileFeature for Install {
                             Some(gid.as_raw()),
                         )?;
                     }
+                }
+            }
+            if let Some(implicit_resources) = &self.implicit_resources {
+                // dev mode binaries are symlinked and thus already alongside resources
+                if self.binary_info != Some(BinaryInfo::Dev) {
+                    let dst_parent = dst.parent().expect("must have parent");
+                    let resources_dir = dst_parent.join(&implicit_resources.resources_dir_name);
+                    std::fs::create_dir_all(&resources_dir)?;
+                    for entry in WalkDir::new(&implicit_resources.resources_dir) {
+                        let entry = entry.map_err(std::io::Error::from)?;
+                        let relpath = entry
+                            .path()
+                            .strip_prefix(&implicit_resources.resources_dir)
+                            .expect("this must be under src");
+
+                        let dst_path = resources_dir.join(relpath);
+                        if !dst_path.exists() {
+                            copy_with_metadata(
+                                &std::fs::canonicalize(entry.path())?,
+                                &dst_path,
+                                Some(uid.as_raw()),
+                                Some(gid.as_raw()),
+                            )?;
+                        }
+                    }
+                    copy_with_metadata(
+                        &implicit_resources.resources_json,
+                        &dst_parent.join(format!(
+                            "{}.resources.json",
+                            dst.file_name().expect("dst has filename").to_string_lossy()
+                        )),
+                        Some(uid.as_raw()),
+                        Some(gid.as_raw()),
+                    )?;
                 }
             }
         }
