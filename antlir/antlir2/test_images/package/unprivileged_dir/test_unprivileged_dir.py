@@ -107,3 +107,6 @@ class TestUnprivilegedDir(TestCase):
         for relpath, stat_info in stats.items():
             self.assertEqual(uid, stat_info.st_uid, f"{relpath} owned by wrong user")
             self.assertEqual(gid, stat_info.st_gid, f"{relpath} owned by wrong group")
+
+        # Note: We can't currently verify hardlinks because feature.install uses
+        # copy_with_metadata, which doesn't preserve them
