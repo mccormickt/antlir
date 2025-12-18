@@ -38,12 +38,10 @@ pub(crate) fn log_command(command: &mut Command) -> &mut Command {
 /// finish fast.
 pub(crate) fn run_command_capture_output(command: &mut Command) -> Result<(), std::io::Error> {
     let output = log_command(command).output()?;
-    let stdout = String::from_utf8(output.stdout).map_err(|e| {
-        std::io::Error::new(ErrorKind::Other, format!("Failed to decode stdout: {e}"))
-    })?;
-    let stderr = String::from_utf8(output.stderr).map_err(|e| {
-        std::io::Error::new(ErrorKind::Other, format!("Failed to decode stderr: {e}"))
-    })?;
+    let stdout = String::from_utf8(output.stdout)
+        .map_err(|e| std::io::Error::other(format!("Failed to decode stdout: {e}")))?;
+    let stderr = String::from_utf8(output.stderr)
+        .map_err(|e| std::io::Error::other(format!("Failed to decode stderr: {e}")))?;
     if !output.status.success() {
         error!(
             "Command {} failed\nStdout: {}\nStderr: {}",
@@ -51,10 +49,10 @@ pub(crate) fn run_command_capture_output(command: &mut Command) -> Result<(), st
             stdout,
             stderr
         );
-        return Err(std::io::Error::new(
-            ErrorKind::Other,
-            format!("Failed to execute command: {:?}", command),
-        ));
+        return Err(std::io::Error::other(format!(
+            "Failed to execute command: {:?}",
+            command
+        )));
     }
     if !stdout.is_empty() {
         debug!(stdout);

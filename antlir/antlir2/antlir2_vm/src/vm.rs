@@ -351,19 +351,13 @@ impl<S: Share> VM<S> {
                     let msg = format!("Sidecar service at index {} finished unexpectedly", i);
                     error!("{}", &msg);
                     let status = x.join().map_err(|e| {
-                        VMError::SidecarError(std::io::Error::new(
-                            ErrorKind::Other,
-                            format!(
-                                "Failed to join thread for sidecar service at index {}: {:?}",
-                                i, e
-                            ),
-                        ))
+                        VMError::SidecarError(std::io::Error::other(format!(
+                            "Failed to join thread for sidecar service at index {}: {:?}",
+                            i, e
+                        )))
                     })?;
                     error!("Exit status {:#?}", status);
-                    return Err(VMError::SidecarError(std::io::Error::new(
-                        ErrorKind::Other,
-                        msg,
-                    )));
+                    return Err(VMError::SidecarError(std::io::Error::other(msg)));
                 }
                 Ok(())
             })
