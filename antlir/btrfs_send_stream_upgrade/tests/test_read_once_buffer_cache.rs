@@ -30,7 +30,7 @@ const MAX_HALF_LENGTH: u16 = 9;
 
 fn reader(cache: &ReadOnceBufferCache, to_read: Vec<u16>, id: usize) {
     let length = to_read.len();
-    if length % 2 != 0 {
+    if !length.is_multiple_of(2) {
         panic!("Expected an even number of elements, got {}", length);
     }
     let mut last_end = 0;
