@@ -1369,7 +1369,7 @@ impl SendCommand {
                 let expected_data_payload_offset =
                     write_offset + pre_data_attribute_size + data_attribute_header_size;
                 anyhow::ensure!(
-                    expected_data_payload_offset % BLOCK_SIZE == 0,
+                    expected_data_payload_offset.is_multiple_of(BLOCK_SIZE),
                     "Generated pad Command={}, but write offset is {} and expected data payload offset is {}",
                     pad_command,
                     write_offset,
