@@ -12,6 +12,7 @@ use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::fs::fchown;
 use std::path::Path;
+use std::path::PathBuf;
 
 use antlir2_compile::CompilerContext;
 use antlir2_compile::util::copy_with_metadata;
@@ -220,6 +221,30 @@ impl<'de> Deserialize<'de> for XattrValue {
     }
 }
 
+fn walkdir_entry_to_path_item(path: PathBuf, entry: &walkdir::DirEntry) -> Result<Item, String> {
+    if entry.file_type().is_file() {
+        Ok(Item::Path(PathItem::Entry(FsEntry {
+            path,
+            file_type: FileType::File,
+            mode: 0o444,
+        })))
+    } else if entry.file_type().is_dir() {
+        Ok(Item::Path(PathItem::Entry(FsEntry {
+            path,
+            file_type: FileType::Directory,
+            mode: 0o755,
+        })))
+    } else if entry.file_type().is_symlink() {
+        let target = std::fs::read_link(entry.path())
+            .with_context(|| format!("while reading link target of {}", entry.path().display()))
+            .map_err(|e| e.to_string())?;
+        Ok(Item::Path(PathItem::Symlink { link: path, target }))
+    } else {
+        Err(format!(
+            "unexpected walkdir file type {entry:?} for {path:?}"
+        ))
+    }
+}
 impl antlir2_depgraph_if::RequiresProvides for Install {
     fn provides(&self) -> Result<Vec<Item>, String> {
         if self.is_dir() {
@@ -239,29 +264,7 @@ impl antlir2_depgraph_if::RequiresProvides for Install {
                 if relpath == Path::new("") {
                     continue;
                 }
-                if entry.file_type().is_file() {
-                    v.push(Item::Path(PathItem::Entry(FsEntry {
-                        path: self.dst.join(relpath),
-                        file_type: FileType::File,
-                        mode: 0o444,
-                    })))
-                } else if entry.file_type().is_dir() {
-                    v.push(Item::Path(PathItem::Entry(FsEntry {
-                        path: self.dst.join(relpath),
-                        file_type: FileType::Directory,
-                        mode: 0o755,
-                    })))
-                } else if entry.file_type().is_symlink() {
-                    let target = std::fs::read_link(entry.path())
-                        .with_context(|| {
-                            format!("while reading link target of {}", entry.path().display())
-                        })
-                        .map_err(|e| e.to_string())?;
-                    v.push(Item::Path(PathItem::Symlink {
-                        link: self.dst.join(relpath),
-                        target,
-                    }));
-                }
+                v.push(walkdir_entry_to_path_item(self.dst.join(relpath), &entry)?);
             }
             Ok(v)
         } else {
@@ -302,6 +305,48 @@ impl antlir2_depgraph_if::RequiresProvides for Install {
                         }
                     }
                 }
+            }
+            if let Some(implicit_resources) = &self.implicit_resources
+                // dev mode binaries are symlinked and thus already alongside resources
+                && self.binary_info != Some(BinaryInfo::Dev)
+            {
+                let dst_parent = self.dst.parent().expect("must have parent");
+                let resources_dir = dst_parent.join(&implicit_resources.resources_dir_name);
+                provides.push(Item::Path(PathItem::Entry(FsEntry {
+                    path: resources_dir.to_path_buf(),
+                    file_type: FileType::Directory,
+                    mode: 0o555,
+                })));
+                for entry in WalkDir::new(&implicit_resources.resources_dir).min_depth(1) {
+                    let entry = entry
+                        .with_context(|| {
+                            format!(
+                                "while walking resources dir {:?}",
+                                implicit_resources.resources_dir
+                            )
+                        })
+                        .map_err(|e| e.to_string())?;
+                    let relpath = entry
+                        .path()
+                        .strip_prefix(&implicit_resources.resources_dir)
+                        .expect("this must be under src");
+
+                    provides.push(walkdir_entry_to_path_item(
+                        resources_dir.join(relpath),
+                        &entry,
+                    )?);
+                }
+                provides.push(Item::Path(PathItem::Entry(FsEntry {
+                    path: dst_parent.join(format!(
+                        "{}.resources.json",
+                        self.dst
+                            .file_name()
+                            .expect("dst has filename")
+                            .to_string_lossy()
+                    )),
+                    file_type: FileType::File,
+                    mode: 0o444,
+                })));
             }
             Ok(provides)
         }
@@ -507,39 +552,39 @@ impl antlir2_compile::CompileFeature for Install {
                     }
                 }
             }
-            if let Some(implicit_resources) = &self.implicit_resources {
+            if let Some(implicit_resources) = &self.implicit_resources
                 // dev mode binaries are symlinked and thus already alongside resources
-                if self.binary_info != Some(BinaryInfo::Dev) {
-                    let dst_parent = dst.parent().expect("must have parent");
-                    let resources_dir = dst_parent.join(&implicit_resources.resources_dir_name);
-                    std::fs::create_dir_all(&resources_dir)?;
-                    for entry in WalkDir::new(&implicit_resources.resources_dir) {
-                        let entry = entry.map_err(std::io::Error::from)?;
-                        let relpath = entry
-                            .path()
-                            .strip_prefix(&implicit_resources.resources_dir)
-                            .expect("this must be under src");
+                && self.binary_info != Some(BinaryInfo::Dev)
+            {
+                let dst_parent = dst.parent().expect("must have parent");
+                let resources_dir = dst_parent.join(&implicit_resources.resources_dir_name);
+                std::fs::create_dir_all(&resources_dir)?;
+                for entry in WalkDir::new(&implicit_resources.resources_dir) {
+                    let entry = entry.map_err(std::io::Error::from)?;
+                    let relpath = entry
+                        .path()
+                        .strip_prefix(&implicit_resources.resources_dir)
+                        .expect("this must be under src");
 
-                        let dst_path = resources_dir.join(relpath);
-                        if !dst_path.exists() {
-                            copy_with_metadata(
-                                &std::fs::canonicalize(entry.path())?,
-                                &dst_path,
-                                Some(uid.as_raw()),
-                                Some(gid.as_raw()),
-                            )?;
-                        }
+                    let dst_path = resources_dir.join(relpath);
+                    if !dst_path.exists() {
+                        copy_with_metadata(
+                            &std::fs::canonicalize(entry.path())?,
+                            &dst_path,
+                            Some(uid.as_raw()),
+                            Some(gid.as_raw()),
+                        )?;
                     }
-                    copy_with_metadata(
-                        &implicit_resources.resources_json,
-                        &dst_parent.join(format!(
-                            "{}.resources.json",
-                            dst.file_name().expect("dst has filename").to_string_lossy()
-                        )),
-                        Some(uid.as_raw()),
-                        Some(gid.as_raw()),
-                    )?;
                 }
+                copy_with_metadata(
+                    &implicit_resources.resources_json,
+                    &dst_parent.join(format!(
+                        "{}.resources.json",
+                        dst.file_name().expect("dst has filename").to_string_lossy()
+                    )),
+                    Some(uid.as_raw()),
+                    Some(gid.as_raw()),
+                )?;
             }
         }
         Ok(())
