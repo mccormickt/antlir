@@ -97,9 +97,8 @@ impl FromStr for Capabilities {
     type Err = std::io::Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        let cstr = CString::new(s).map_err(|_| {
-            std::io::Error::new(std::io::ErrorKind::Other, "string had interior NUL byte")
-        })?;
+        let cstr =
+            CString::new(s).map_err(|_| std::io::Error::other("string had interior NUL byte"))?;
         let cap = unsafe { libcap_sys::cap_from_text(cstr.as_ptr()) };
         if cap.is_null() {
             Err(std::io::Error::last_os_error())
