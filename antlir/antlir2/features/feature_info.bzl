@@ -94,6 +94,9 @@ FeatureAnalysis = provider(fields = {
     # Arbitrary JSON files that will be inserted into the facts db
     "extend_facts_json": provider_field(list[Artifact], default = []),
     "feature_type": provider_field(str),
+    # Function that will be called to update the 'supplements' map of the
+    # LayerInfo that is using this feature
+    "mutate_supplements": provider_field(typing.Any, default = None),
     # This feature requires running some logic within the feature's plugin
     # implementation to inform buck of dynamic dependencies.
     "planner": provider_field(Planner | None, default = None),
@@ -120,11 +123,14 @@ MultiFeatureAnalysis = provider(fields = {
 
 PlanInfo = provider(fields = {
     "extend_facts_json": provider_field(list[Artifact], default = []),
-    "hidden": provider_field(ArgLike),
+    "hidden": provider_field(ArgLike, default = []),
     # Unique string identifying this plan artifact for retrieval by the feature
     # that produced it
     "id": provider_field(str),
-    "output": provider_field(Artifact),
+    # Function that will be called to update the 'supplements' map of the
+    # LayerInfo that is using this feature
+    "mutate_supplements": provider_field(typing.Any, default = None),
+    "output": provider_field(Artifact | None, default = None),
     # Expose some artifacts as debug subtargets
     "sub_artifacts": provider_field(dict[str, Artifact], default = {}),
 })

@@ -279,6 +279,7 @@ def _impl_with_features(features: ProviderCollection, *, ctx: AnalysisContext) -
 
     layer = ctx.attrs.parent_layer[LayerInfo].contents if ctx.attrs.parent_layer else None
     facts_db = ctx.attrs.parent_layer[LayerInfo].facts_db if ctx.attrs.parent_layer else None
+    supplements = dict(ctx.attrs.parent_layer[LayerInfo].supplements) if ctx.attrs.parent_layer else {}
     debug_sub_targets = {}
     phase_contents = []
 
@@ -393,6 +394,11 @@ def _impl_with_features(features: ProviderCollection, *, ctx: AnalysisContext) -
                             },
                         )]
                     extend_facts.extend(pi.extend_facts_json)
+                    if pi.mutate_supplements:
+                        supplements = pi.mutate_supplements(supplements)
+
+            if feature.analysis.mutate_supplements:
+                supplements = feature.analysis.mutate_supplements(supplements)
         previous_phase_plans = plans
 
         phase_sub_targets["plan"] = [DefaultInfo(sub_targets = plan_sub_targets)]
@@ -496,6 +502,7 @@ def _impl_with_features(features: ProviderCollection, *, ctx: AnalysisContext) -
             features = all_features,
             contents = layer,
             phase_contents = phase_contents,
+            supplements = supplements,
         ),
     ]
 

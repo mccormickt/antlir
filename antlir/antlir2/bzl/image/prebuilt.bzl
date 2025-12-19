@@ -130,6 +130,7 @@ def _impl(ctx: AnalysisContext) -> list[Provider]:
                 BuildPhase("compile"),
                 contents,
             )],
+            supplements = {},
         ),
         DefaultInfo(subvol_symlink, sub_targets = {
             "debug": [DefaultInfo(sub_targets = {

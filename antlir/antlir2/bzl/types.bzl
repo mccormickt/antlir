@@ -51,6 +51,9 @@ LayerInfo = provider(
         # LayerContents broken out by all the internal phases (for packages that
         # support incremental outputs)
         "phase_contents": list[(BuildPhase | typing.Any, LayerContents | typing.Any)],
+        # Extra data that can be added by individual features and gets carried
+        # across the dependency chain to child layers
+        "supplements": dict[str, typing.Any],
     },
 )
 
