@@ -25,11 +25,11 @@ class Test(unittest.TestCase):
     def test_json_env_quoting(self) -> None:
         self.assertEqual({"foo": "bar"}, json.loads(os.getenv("JSON_ENV")))
 
-    def dev_null(self) -> None:
+    def test_dev_null(self) -> None:
         st = os.stat("/dev/null")
         self.assertTrue(st.st_mode & stat.S_IFCHR, "/dev/null should be char device")
         self.assertEqual(
-            st.st_rdev & stat.S_IFCHR,
+            st.st_rdev,
             os.makedev(1, 3),
             "/dev/null device number is wrong",
         )
