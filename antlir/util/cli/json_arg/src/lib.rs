@@ -65,8 +65,7 @@ where
     fn deserialize<R: Read>(reader: R) -> Result<T, Self::Error> {
         // [toml] has no way to deserialize from a reader :(
         let str = std::io::read_to_string(reader)?;
-        toml::from_str(&str)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+        toml::from_str(&str).map_err(|e| std::io::Error::other(e.to_string()))
     }
 }
 
@@ -176,7 +175,7 @@ where
                 value,
                 deser: PhantomData,
             })
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+            .map_err(|e| std::io::Error::other(e.to_string()))
     }
 }
 
