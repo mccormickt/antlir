@@ -88,7 +88,7 @@ impl Capabilities {
         let cap_text = self.cap_text()?;
         let cstr = unsafe { CStr::from_ptr(cap_text.0) };
         cstr.to_str()
-            .map_err(|e| std::io::Error::other(e))
+            .map_err(std::io::Error::other)
             .map(|s| s.to_owned())
     }
 }
