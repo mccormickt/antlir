@@ -4,12 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 
 # @oss-disable[end= ]: load("@fbcode_macros//build_defs:fully_qualified_test_name_rollout.bzl", "NAMING_ROLLOUT_LABEL", "fully_qualified_test_name_rollout")
-# @oss-disable[end= ]: load("@fbsource//tools/build_defs:testpilot_defs.bzl", "special_tags")
+# @oss-disable[end= ]: load("@fbsource//tools/build_defs:testpilot_defs.bzl", "tpx_labels")
 load("//antlir/antlir2/bzl:platform.bzl", "default_target_platform_kwargs")
 load("//antlir/bzl:build_defs.bzl", "buck_sh_test", "cpp_unittest", "python_unittest", "rust_unittest")
-load("//antlir/bzl:oss_shim.bzl", "special_tags") # @oss-enable
+load("//antlir/bzl:oss_shim.bzl", "tpx_labels") # @oss-enable
 
-_HIDE_TEST_LABELS = [special_tags.disabled, special_tags.test_is_invisible_to_testpilot]
+_HIDE_TEST_LABELS = [tpx_labels.disabled, tpx_labels.test_is_invisible_to_testpilot]
 
 def _impl(ctx: AnalysisContext) -> list[Provider]:
     test_cmd = cmd_args(

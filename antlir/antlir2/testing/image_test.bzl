@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 # @oss-disable[end= ]: load("@fbcode_macros//build_defs:fully_qualified_test_name_rollout.bzl", "NAMING_ROLLOUT_LABEL", "fully_qualified_test_name_rollout")
-# @oss-disable[end= ]: load("@fbsource//tools/build_defs:testpilot_defs.bzl", "special_tags")
+# @oss-disable[end= ]: load("@fbsource//tools/build_defs:testpilot_defs.bzl", "tpx_labels")
 # @oss-disable[end= ]: load("@fbsource//tools/target_determinator/macros:ci.bzl", "ci")
 load("@prelude//utils:selects.bzl", "selects")
 load("//antlir/antlir2/antlir2_rootless:cfg.bzl", "rootless_cfg")
@@ -16,11 +16,11 @@ load("//antlir/antlir2/bzl/feature:defs.bzl", "feature")
 load("//antlir/antlir2/bzl/image:cfg.bzl", "cfg_attrs", "layer_cfg")
 load("//antlir/antlir2/bzl/image:defs.bzl", "image")
 load("//antlir/bzl:build_defs.bzl", "add_test_framework_label", "buck_sh_test", "cpp_unittest", "python_unittest", "rust_unittest")
-load("//antlir/bzl:oss_shim.bzl", "special_tags") # @oss-enable
+load("//antlir/bzl:oss_shim.bzl", "tpx_labels") # @oss-enable
 
 load("//antlir/bzl:internal_external.bzl", "internal_external", "is_facebook")
 
-HIDE_TEST_LABELS = [special_tags.disabled, special_tags.test_is_invisible_to_testpilot]
+HIDE_TEST_LABELS = [tpx_labels.disabled, tpx_labels.test_is_invisible_to_testpilot]
 
 def env_from_wrapped_test(wrapped_test):
     env = dict(wrapped_test[ExternalRunnerTestInfo].env)
@@ -308,7 +308,7 @@ def _implicit_image_test(
         layer = layer,
         run_as_user = run_as_user,
         test = ":" + name + "_image_test_inner",
-        labels = labels + [special_tags.enable_artifact_reporting],
+        labels = labels + [tpx_labels.enable_artifact_reporting],
         boot = boot,
         boot_requires_units = boot_requires_units,
         boot_after_units = boot_after_units,
