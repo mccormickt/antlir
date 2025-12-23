@@ -405,7 +405,7 @@ def _impl_with_features(features: ProviderCollection, *, ctx: AnalysisContext) -
 
         plans = ctx.actions.write_json(
             ctx.actions.declare_output(identifier, "plans.json"),
-            {id: pi.output for id, pi in plans.items()},
+            {id: pi.output for id, pi in plans.items() if pi.output != None},
             with_inputs = True,
         )
 
