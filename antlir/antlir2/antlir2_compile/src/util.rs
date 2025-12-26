@@ -12,19 +12,22 @@ use std::os::unix::fs::MetadataExt;
 use std::os::unix::fs::fchown;
 use std::path::Path;
 
+use bon::builder;
 use tracing::trace;
 use tracing::warn;
 use xattr::FileExt;
 
 use crate::Result;
 
+#[builder]
 #[tracing::instrument(ret, err)]
-pub fn copy_with_metadata(
-    src: &Path,
-    dst: &Path,
-    uid: Option<u32>,
-    gid: Option<u32>,
-) -> Result<()> {
+pub fn copy_with_metadata<S, D>(src: S, dst: D, uid: Option<u32>, gid: Option<u32>) -> Result<()>
+where
+    S: AsRef<Path> + std::fmt::Debug,
+    D: AsRef<Path> + std::fmt::Debug,
+{
+    let src = src.as_ref();
+    let dst = dst.as_ref();
     let metadata = std::fs::symlink_metadata(src)?;
     let uid = uid.unwrap_or(metadata.uid());
     let gid = gid.unwrap_or(metadata.gid());

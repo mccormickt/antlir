@@ -417,12 +417,12 @@ impl antlir2_compile::CompileFeature for Install {
                     continue;
                 }
 
-                copy_with_metadata(
-                    entry.path(),
-                    &dst_path,
-                    Some(uid.as_raw()),
-                    Some(gid.as_raw()),
-                )?;
+                copy_with_metadata()
+                    .src(entry.path())
+                    .dst(&dst_path)
+                    .uid(uid.as_raw())
+                    .gid(gid.as_raw())
+                    .call()?;
             }
 
             let dir_path = ctx.dst_path(&self.dst)?;
@@ -463,12 +463,12 @@ impl antlir2_compile::CompileFeature for Install {
                         if self.always_use_gnu_debuglink {
                             let debug_dst = dst.with_extension("debug");
                             cp_debug_symbols(debuginfo, &debug_dst, dwp, uid, gid)?;
-                            copy_with_metadata(
-                                &self.src,
-                                &dst,
-                                Some(uid.as_raw()),
-                                Some(gid.as_raw()),
-                            )?;
+                            copy_with_metadata()
+                                .src(&self.src)
+                                .dst(&dst)
+                                .uid(uid.as_raw())
+                                .gid(gid.as_raw())
+                                .call()?;
                             add_gnu_debuglink(&dst, &debug_dst)?;
                         } else if let Some(buildid) = &metadata.buildid {
                             let debug_dst = ctx
@@ -479,19 +479,19 @@ impl antlir2_compile::CompileFeature for Install {
                                 )?
                                 .with_extension("debug");
                             cp_debug_symbols(debuginfo, &debug_dst, dwp, uid, gid)?;
-                            copy_with_metadata(
-                                &self.src,
-                                &dst,
-                                Some(uid.as_raw()),
-                                Some(gid.as_raw()),
-                            )?;
+                            copy_with_metadata()
+                                .src(&self.src)
+                                .dst(&dst)
+                                .uid(uid.as_raw())
+                                .gid(gid.as_raw())
+                                .call()?;
                         } else {
-                            copy_with_metadata(
-                                &self.src,
-                                &dst,
-                                Some(uid.as_raw()),
-                                Some(gid.as_raw()),
-                            )?;
+                            copy_with_metadata()
+                                .src(&self.src)
+                                .dst(&dst)
+                                .uid(uid.as_raw())
+                                .gid(gid.as_raw())
+                                .call()?;
                         };
                         let dst_file = File::options().write(true).open(&dst)?;
                         Some(dst_file)
@@ -543,12 +543,12 @@ impl antlir2_compile::CompileFeature for Install {
                         .join(&shared_libraries.dir_name);
                     std::fs::create_dir_all(&shared_lib_dir)?;
                     for shared_lib in &shared_libraries.so_targets {
-                        copy_with_metadata(
-                            &shared_lib.target,
-                            &shared_lib_dir.join(&shared_lib.soname),
-                            Some(uid.as_raw()),
-                            Some(gid.as_raw()),
-                        )?;
+                        copy_with_metadata()
+                            .src(&shared_lib.target)
+                            .dst(shared_lib_dir.join(&shared_lib.soname))
+                            .uid(uid.as_raw())
+                            .gid(gid.as_raw())
+                            .call()?;
                     }
                 }
             }
@@ -568,23 +568,23 @@ impl antlir2_compile::CompileFeature for Install {
 
                     let dst_path = resources_dir.join(relpath);
                     if !dst_path.exists() {
-                        copy_with_metadata(
-                            &std::fs::canonicalize(entry.path())?,
-                            &dst_path,
-                            Some(uid.as_raw()),
-                            Some(gid.as_raw()),
-                        )?;
+                        copy_with_metadata()
+                            .src(std::fs::canonicalize(entry.path())?)
+                            .dst(dst_path)
+                            .uid(uid.as_raw())
+                            .gid(gid.as_raw())
+                            .call()?;
                     }
                 }
-                copy_with_metadata(
-                    &implicit_resources.resources_json,
-                    &dst_parent.join(format!(
+                copy_with_metadata()
+                    .src(&implicit_resources.resources_json)
+                    .dst(dst_parent.join(format!(
                         "{}.resources.json",
                         dst.file_name().expect("dst has filename").to_string_lossy()
-                    )),
-                    Some(uid.as_raw()),
-                    Some(gid.as_raw()),
-                )?;
+                    )))
+                    .uid(uid.as_raw())
+                    .gid(gid.as_raw())
+                    .call()?;
             }
         }
         Ok(())
@@ -604,16 +604,21 @@ fn cp_debug_symbols(
             .expect("debug_dst will always have parent"),
     )?;
 
-    copy_with_metadata(debug_src, debug_dst, Some(uid.as_raw()), Some(gid.as_raw()))?;
+    copy_with_metadata()
+        .src(debug_src)
+        .dst(debug_dst)
+        .uid(uid.as_raw())
+        .gid(gid.as_raw())
+        .call()?;
     if let Some(dwp) = maybe_dwp {
         // We want dwps to live alongside the split *.debug file as *.debug.dwp such
         // that it's discoverable by lldb
-        copy_with_metadata(
-            dwp,
-            &debug_dst.with_extension("debug.dwp"),
-            Some(uid.as_raw()),
-            Some(gid.as_raw()),
-        )?;
+        copy_with_metadata()
+            .src(dwp)
+            .dst(debug_dst.with_extension("debug.dwp"))
+            .uid(uid.as_raw())
+            .gid(gid.as_raw())
+            .call()?;
     }
     Ok(())
 }

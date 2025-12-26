@@ -194,7 +194,7 @@ pub fn copy_dep(dep: &Path, dst: &Path) -> Result<()> {
             ));
         }
     } else {
-        copy_with_metadata(&dep, dst, None, None)?;
+        copy_with_metadata().src(&dep).dst(dst).call()?
     }
     Ok(())
 }

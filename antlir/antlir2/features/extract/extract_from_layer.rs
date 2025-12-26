@@ -146,13 +146,11 @@ impl antlir2_compile::CompileFeature for ExtractFromLayer {
                     .into());
                 }
 
-                copy_with_metadata(
-                    &target_under_src,
-                    &ctx.dst_path(canonical_target_rel)?,
-                    None,
-                    None,
-                )
-                .context("while copying target_under_src to canonical_target_rel")?;
+                copy_with_metadata()
+                    .src(&target_under_src)
+                    .dst(ctx.dst_path(canonical_target_rel)?)
+                    .call()
+                    .context("while copying target_under_src to canonical_target_rel")?;
 
                 // use the exact same link target when recreating the
                 // symlinkg (in other words, the same "relativeness")
@@ -168,7 +166,7 @@ impl antlir2_compile::CompileFeature for ExtractFromLayer {
                 canonical_target
             } else {
                 // if the binary is a regular file, copy it directly
-                copy_with_metadata(&src, &dst, None, None)?;
+                copy_with_metadata().src(&src).dst(&dst).call()?;
                 binary.to_owned()
             };
 

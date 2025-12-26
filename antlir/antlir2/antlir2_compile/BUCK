@@ -10,6 +10,7 @@ rust_library(
     ]),
     deps = [
         "anyhow",
+        "bon",
         "cap-std",
         "libloading",
         "nix",

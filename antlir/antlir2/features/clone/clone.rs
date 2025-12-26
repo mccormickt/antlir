@@ -272,7 +272,10 @@ impl antlir2_compile::CompileFeature for Clone {
             };
 
             let dst_path = ctx.dst_path(self.dst_path.join(relpath.as_ref()))?;
-            copy_with_metadata(entry.path(), &dst_path, None, None)?;
+            copy_with_metadata()
+                .src(entry.path())
+                .dst(&dst_path)
+                .call()?;
 
             // {ug}ids might not map to the same names in both images, so make
             // sure that we look up the src ids and copy the _names_ instead of
