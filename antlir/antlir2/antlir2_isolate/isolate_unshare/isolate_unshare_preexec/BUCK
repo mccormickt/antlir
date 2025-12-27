@@ -21,6 +21,8 @@ rust_binary(
         "rustix",
         "serde_json",
         "tokio",
+        "tracing",
+        "tracing-subscriber",
         "//antlir/antlir2/antlir2_isolate/isolate_cfg:isolate_cfg",
         "//antlir/antlir2/antlir2_path:antlir2_path",
         "//antlir/util/cli/json_arg:json_arg",

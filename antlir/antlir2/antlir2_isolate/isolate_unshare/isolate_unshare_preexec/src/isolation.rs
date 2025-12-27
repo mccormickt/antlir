@@ -25,6 +25,7 @@ use nix::sched::unshare;
 use nix::unistd::Gid;
 use nix::unistd::Uid;
 use nix::unistd::User;
+use tracing::warn;
 
 /// MS_NOSYMFOLLOW (since Linux 5.10)
 /// Do not follow symbolic links when resolving paths.  Symbolic links can still
@@ -332,14 +333,28 @@ pub(crate) fn setup_isolation(isol: &IsolationContext) -> Result<()> {
         Err(e) if e.kind() == ErrorKind::AlreadyExists => Ok(()),
         Err(e) => Err(e),
     }?;
-    nix::mount::mount(
+
+    match nix::mount::mount(
         None::<&str>,
         &newroot.open_dir("proc")?.abspath(),
         Some("proc"),
         MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC | MsFlags::MS_NODEV,
         None::<&str>,
-    )
-    .context("while mounting /proc")?;
+    ) {
+        Ok(()) => Ok(()),
+        Err(nix::errno::Errno::EPERM) => {
+            warn!("got EPERM while mounting /proc - attempting a bind mount instead");
+            mount(
+                Some("/proc"),
+                &newroot.open_dir("proc")?.abspath(),
+                None::<&str>,
+                MsFlags::MS_BIND | MsFlags::MS_REC,
+                None::<&str>,
+            )
+            .context("while bind-mounting /proc")
+        }
+        Err(e) => Err(e).context("while mounting /proc"),
+    }?;
 
     nix::unistd::chroot(&newroot.abspath())?;
     if let Some(wd) = working_directory {

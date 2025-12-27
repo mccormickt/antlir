@@ -40,6 +40,9 @@ struct Main {
 }
 
 fn main() {
+    tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .init();
     let args = Subcommand::parse();
     if let Err(e) = match args {
         Subcommand::Main(args) => do_main(args),
