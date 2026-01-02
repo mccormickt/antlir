@@ -602,6 +602,12 @@ fn run_dnf_driver(
         // discourage systemd-tmpfiles postscripts from creating nested subvols,
         // since antlir does not handle that very nicely
         .setenv(("SYSTEMD_TMPFILES_FORCE_SUBVOL", "0"))
+        // Discourage systemd from trying to contact pid1 over dbus and do
+        // offline operations implicitly (where possible obviously)
+        // This is only relevant in the /proc fallback case from S597085,
+        // otherwise pid1 does not appear to be systemd at all and this is
+        // already the behavior that systemd would have had
+        .setenv(("SYSTEMD_OFFLINE", "1"))
         .build();
     if ctx.is_planning() {
         isol.inputs((Path::new("/__antlir2__/root"), root.deref()))
