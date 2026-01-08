@@ -9,6 +9,87 @@ load("//antlir/antlir2/bzl/feature:defs.bzl", "feature")
 load("//antlir/bzl:internal_external.bzl", "internal_external")
 load("//antlir/bzl:target_helpers.bzl", "normalize_target")
 
+def _release_file_dynamic_impl(
+        actions: AnalysisActions,
+        rev_time: ArtifactValue,
+        contents_out: OutputArtifact,
+        os_name: str,
+        os_id: str,
+        os_version: str,
+        os_version_id: str,
+        variant: str,
+        ansi_color: str,
+        api_versions: dict,
+        layer_raw_target: str,
+        vcs_rev: str | None,
+        package_name: str,
+        package_version: str):
+    """
+    Dynamic action implementation that reads the rev_time and generates
+    the os-release file.
+    """
+    date, time = rev_time.read_string().strip().split(" ")
+    rev_time_formatted = "{}T{}".format(date, time)
+
+    api_vers = [
+        "API_VER_{key}=\"{val}\"".format(key = key, val = val)
+        for key, val in api_versions.items()
+    ]
+
+    contents = """
+NAME="{os_name}"
+ID="{os_id}"
+VERSION="{os_version}"
+VERSION_ID="{os_version_id}"
+PRETTY_NAME="{os_name} {os_version} {variant} ({rev})"
+IMAGE_ID="{image_id}"
+IMAGE_LAYER="{target}"
+IMAGE_VCS_REV="{rev}"
+IMAGE_VCS_REV_TIME="{rev_time}"
+{IMAGE_PACKAGE_KEY}="{image_package}"
+VARIANT="{variant}"
+VARIANT_ID="{lower_variant}"
+ANSI_COLOR="{ansi_color}"
+{api_vers}
+        """.format(
+        os_name = os_name,
+        os_id = os_id,
+        os_version = os_version,
+        os_version_id = os_version_id,
+        variant = variant,
+        lower_variant = variant.lower(),
+        ansi_color = ansi_color,
+        image_id = native.read_config("build_info", "target_path", "local"),
+        target = layer_raw_target,
+        rev = vcs_rev or "local",
+        rev_time = rev_time_formatted,
+        api_vers = "\n".join(api_vers),
+        IMAGE_PACKAGE_KEY = internal_external(fb = "IMAGE_FBPKG", oss = "IMAGE_PACKAGE"),
+        image_package = package_name + ":" + package_version,
+    ).strip() + "\n"
+
+    actions.write(contents_out, contents)
+    return []
+
+_release_file_dynamic = dynamic_actions(
+    impl = _release_file_dynamic_impl,
+    attrs = {
+        "ansi_color": dynattrs.value(str),
+        "api_versions": dynattrs.value(dict),
+        "contents_out": dynattrs.output(),
+        "layer_raw_target": dynattrs.value(str),
+        "os_id": dynattrs.value(str),
+        "os_name": dynattrs.value(str),
+        "os_version": dynattrs.value(str),
+        "os_version_id": dynattrs.value(str),
+        "package_name": dynattrs.value(str),
+        "package_version": dynattrs.value(str),
+        "rev_time": dynattrs.artifact_value(),
+        "variant": dynattrs.value(str),
+        "vcs_rev": dynattrs.value(str | None),
+    },
+)
+
 def _release_file_impl(ctx: AnalysisContext) -> list[Provider]:
     for key in ctx.attrs.api_versions.keys():
         if not key.isupper():
@@ -38,54 +119,22 @@ def _release_file_impl(ctx: AnalysisContext) -> list[Provider]:
 
     contents_out = ctx.actions.declare_output("os-release")
 
-    def _dyn(ctx, artifacts, outputs, rev_time = rev_time, contents_out = contents_out):
-        date, time = artifacts[rev_time].read_string().strip().split(" ")
-        rev_time = "{}T{}".format(date, time)
-
-        api_vers = [
-            "API_VER_{key}=\"{val}\"".format(key = key, val = val)
-            for key, val in ctx.attrs.api_versions.items()
-        ]
-
-        contents = """
-NAME="{os_name}"
-ID="{os_id}"
-VERSION="{os_version}"
-VERSION_ID="{os_version_id}"
-PRETTY_NAME="{os_name} {os_version} {variant} ({rev})"
-IMAGE_ID="{image_id}"
-IMAGE_LAYER="{target}"
-IMAGE_VCS_REV="{rev}"
-IMAGE_VCS_REV_TIME="{rev_time}"
-{IMAGE_PACKAGE_KEY}="{image_package}"
-VARIANT="{variant}"
-VARIANT_ID="{lower_variant}"
-ANSI_COLOR="{ansi_color}"
-{api_vers}
-        """.format(
+    ctx.actions.dynamic_output_new(
+        _release_file_dynamic(
+            rev_time = rev_time,
+            contents_out = contents_out.as_output(),
             os_name = ctx.attrs.os_name,
             os_id = ctx.attrs.os_id,
             os_version = ctx.attrs.os_version,
             os_version_id = ctx.attrs.os_version_id,
             variant = ctx.attrs.variant,
-            lower_variant = ctx.attrs.variant.lower(),
             ansi_color = ctx.attrs.ansi_color,
-            image_id = native.read_config("build_info", "target_path", "local"),
-            target = ctx.attrs.layer.raw_target(),
-            rev = ctx.attrs.vcs_rev or "local",
-            rev_time = rev_time,
-            api_vers = "\n".join(api_vers),
-            IMAGE_PACKAGE_KEY = internal_external(fb = "IMAGE_FBPKG", oss = "IMAGE_PACKAGE"),
-            image_package = ctx.attrs.package_name + ":" + ctx.attrs.package_version,
-        ).strip() + "\n"
-
-        ctx.actions.write(outputs[contents_out], contents)
-
-    ctx.actions.dynamic_output(
-        dynamic = [rev_time],
-        inputs = [],
-        outputs = [contents_out.as_output()],
-        f = _dyn,
+            api_versions = ctx.attrs.api_versions,
+            layer_raw_target = str(ctx.attrs.layer.raw_target()),
+            vcs_rev = ctx.attrs.vcs_rev,
+            package_name = ctx.attrs.package_name,
+            package_version = ctx.attrs.package_version,
+        ),
     )
 
     return [
