@@ -65,11 +65,85 @@ def _best_rpm_artifact(
             fail("{} does not have a reflinkable artifact for {}".format(rpm_info.nevra, reflink_flavor))
         return rpm_info.extents[reflink_flavor]
 
-def _possible_rpm_artifacts(*, rpm_info: RpmInfo | Provider, reflink_flavor: str | None) -> list[Artifact]:
-    artifacts = [rpm_info.raw_rpm]
-    if reflink_flavor and reflink_flavor in rpm_info.extents:
-        artifacts.append(rpm_info.extents[reflink_flavor])
-    return artifacts
+def _compiler_plan_to_local_repos_impl(
+        actions: AnalysisActions,
+        tx: ArtifactValue,
+        dnf_available_repos: list,
+        reflink_flavor: str | None,
+        dir: OutputArtifact):
+    """
+    Dynamic action implementation that reads the transaction file and builds
+    the local repos directory.
+    """
+    tx_content = tx.read_json()
+    tree = {}
+
+    # collect all rpms keyed by repo, then nevra
+    by_repo = {}
+    for repo_info in dnf_available_repos:
+        by_repo[repo_info.id] = {"nevras": {}, "repo_info": repo_info}
+        for rpm_info in repo_info.all_rpms:
+            by_repo[repo_info.id]["nevras"][rpm_info.nevra] = rpm_info
+
+    # all repodata is made available even if there are no rpms being
+    # installed from that repository, because of certain things *cough* chef
+    # *cough* that directly query dnf to make runtime decisions, and having
+    # only the necessary set of repositories cause it to make different,
+    # stupid, decisions
+    for repo in by_repo.values():
+        repo_i = repo["repo_info"]
+        tree[paths.join(repo_i.id, "repodata")] = repo_i.repodata
+        for key in repo_i.gpg_keys:
+            tree[paths.join(repo_i.id, "gpg-keys", key.basename)] = key
+        tree[paths.join(repo_i.id, "dnf_conf.json")] = repo_i.dnf_conf_json
+
+    for install in tx_content["install"]:
+        found = False
+
+        # If this rpm is being installed from a local file and not a repo,
+        # skip this materialize-into-a-repo logic
+        if install["repo"] == None:
+            continue
+
+        nevra = "{name}-{epoch}:{version}-{release}.{arch}".format(
+            **install["package"]
+        )
+
+        # The same exact NEVRA may appear in multiple repositories, and then
+        # we have no guarantee that dnf will resolve the transaction the
+        # same way, so we must look in every repo in addition to the one
+        # that was initially recorded
+        for repo in by_repo.values():
+            if nevra in repo["nevras"]:
+                repo_i = repo["repo_info"]
+                rpm_i = repo["nevras"][nevra]
+                tree[paths.join(repo_i.id, package_href(nevra, rpm_i.pkgid))] = _best_rpm_artifact(
+                    rpm_info = rpm_i,
+                    reflink_flavor = reflink_flavor,
+                )
+                found = True
+
+        if not found:
+            # This should be impossible (but through dnf, all things are
+            # possible so jot that down) because the dnf transaction
+            # resolution will fail before we even get to this, but format a
+            # nice warning anyway.
+            fail("'{}' does not appear in any repos".format(nevra))
+
+    # copied_dir instead of symlink_dir so that this can be directly bind
+    # mounted into the container
+    actions.copied_dir(dir, tree)
+    return []
+
+_compiler_plan_to_local_repos_dynamic = dynamic_actions(
+    impl = _compiler_plan_to_local_repos_impl,
+    attrs = {
+        "dir": dynattrs.output(),
+        "dnf_available_repos": dynattrs.value(list),
+        "reflink_flavor": dynattrs.value(str | None),
+        "tx": dynattrs.artifact_value(),
+    },
+)
 
 def compiler_plan_to_local_repos(
         *,
@@ -84,85 +158,12 @@ def compiler_plan_to_local_repos(
     """
     dir = ctx.actions.declare_output(identifier, "dnf_repos", dir = True)
 
-    # collect all rpms keyed by repo, then nevra
-    by_repo = {}
-    for repo_info in dnf_available_repos:
-        by_repo[repo_info.id] = {"nevras": {}, "repo_info": repo_info}
-        for rpm_info in repo_info.all_rpms:
-            by_repo[repo_info.id]["nevras"][rpm_info.nevra] = rpm_info
-
-    def _dyn(ctx, artifacts, outputs, tx = tx, by_repo = by_repo, dir = dir):
-        tx = artifacts[tx].read_json()
-        tree = {}
-
-        # all repodata is made available even if there are no rpms being
-        # installed from that repository, because of certain things *cough* chef
-        # *cough* that directly query dnf to make runtime decisions, and having
-        # only the necessary set of repositories cause it to make different,
-        # stupid, decisions
-        for repo in by_repo.values():
-            repo_i = repo["repo_info"]
-            tree[paths.join(repo_i.id, "repodata")] = repo_i.repodata
-            for key in repo_i.gpg_keys:
-                tree[paths.join(repo_i.id, "gpg-keys", key.basename)] = key
-            tree[paths.join(repo_i.id, "dnf_conf.json")] = repo_i.dnf_conf_json
-
-        for install in tx["install"]:
-            found = False
-
-            # If this rpm is being installed from a local file and not a repo,
-            # skip this materialize-into-a-repo logic
-            if install["repo"] == None:
-                continue
-
-            nevra = "{name}-{epoch}:{version}-{release}.{arch}".format(
-                **install["package"]
-            )
-
-            # The same exact NEVRA may appear in multiple repositories, and then
-            # we have no guarantee that dnf will resolve the transaction the
-            # same way, so we must look in every repo in addition to the one
-            # that was initially recorded
-            for repo in by_repo.values():
-                if nevra in repo["nevras"]:
-                    repo_i = repo["repo_info"]
-                    rpm_i = repo["nevras"][nevra]
-                    tree[paths.join(repo_i.id, package_href(nevra, rpm_i.pkgid))] = _best_rpm_artifact(
-                        rpm_info = rpm_i,
-                        reflink_flavor = reflink_flavor,
-                    )
-                    found = True
-
-            if not found:
-                # This should be impossible (but through dnf, all things are
-                # possible so jot that down) because the dnf transaction
-                # resolution will fail before we even get to this, but format a
-                # nice warning anyway.
-                fail("'{}' does not appear in any repos".format(nevra))
-
-        # copied_dir instead of symlink_dir so that this can be directly bind
-        # mounted into the container
-        ctx.actions.copied_dir(outputs[dir], tree)
-
-    # All rpm artifacts are made available to the dynamic output computation. We
-    # can't yet know whether or not rpmcow will be availalbe so must provide all
-    # variants of the rpm artifact, but the dynamic output will still use the
-    # most efficient possible.
-    inputs = []
-    for repo in by_repo.values():
-        for rpm_info in repo["nevras"].values():
-            inputs.extend(_possible_rpm_artifacts(
-                rpm_info = rpm_info,
-                reflink_flavor = reflink_flavor,
-            ))
-
-    ctx.actions.dynamic_output(
-        # the dynamic action reads this
-        dynamic = [tx],
-        inputs = inputs,
-        # to produce this, a directory that contains a (partial, but complete
-        # for the transaction) copy of the repos needed to do the installation
-        outputs = [dir.as_output()],
-        f = _dyn,
+    ctx.actions.dynamic_output_new(
+        _compiler_plan_to_local_repos_dynamic(
+            tx = tx,
+            dnf_available_repos = dnf_available_repos,
+            reflink_flavor = reflink_flavor,
+            dir = dir.as_output(),
+        ),
     )
     return dir
