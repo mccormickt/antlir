@@ -71,8 +71,7 @@ class Path(bytes):
             # NB: The verbose error can be expensive, but this error must
             # never occur in correct code, so optimize for debuggability.
             raise TypeError(
-                f"Cannot compare `Path` {repr(self)} with "
-                f"`{type(obj)}` {repr(obj)}."
+                f"Cannot compare `Path` {repr(self)} with `{type(obj)}` {repr(obj)}."
             )
         return super().__eq__(obj)
 

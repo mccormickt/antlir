@@ -19,10 +19,8 @@ import os
 import sys
 
 import antlir2_dnf_base
-
 import dnf
 import libdnf
-
 from antlir2_features_rpm_common import (
     AntlirError,
     compute_explicitly_installed_package_names,

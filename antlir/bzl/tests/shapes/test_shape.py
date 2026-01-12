@@ -18,7 +18,6 @@ from antlir.bzl.tests.shapes.test import (
     friend_t,
     hashable_t,
 )
-
 from antlir.freeze import frozendict
 from antlir.fs_utils import Path
 from antlir.shape import Shape
@@ -125,11 +124,7 @@ class TestShape(unittest.TestCase):
             "affiliations=shape(faction='Rebellion'), "
             "appears_in=(4, 5, 6), "
             "friends=("
-            + (
-                "shape(name='Han Solo'), "
-                "shape(name='Leia Organa'), "
-                "shape(name='C-3PO')"
-            )
+            + ("shape(name='Han Solo'), shape(name='Leia Organa'), shape(name='C-3PO')")
             + "), "
             "metadata=frozendict({'species': 'human'}), "
             "name='Luke Skywalker', "

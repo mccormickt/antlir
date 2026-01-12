@@ -86,9 +86,9 @@ def ensure_no_implicit_removes(
     # user-installed package. If not, the guarantees about not silently removing
     # user-installed rpms obviously cannot be ensured.
     if all_removed_packages:
-        assert (
-            user_installed_packages
-        ), "did not find any user-installed packages, refusing to continue"
+        assert user_installed_packages, (
+            "did not find any user-installed packages, refusing to continue"
+        )
     # Second, find the packages being implicitly removed in this transaction
     implicitly_removed = {
         pkg

@@ -24,7 +24,6 @@ from collections import defaultdict
 from urllib.parse import urlparse
 
 import antlir2_dnf_base
-
 import dnf
 import hawkey
 import libdnf
