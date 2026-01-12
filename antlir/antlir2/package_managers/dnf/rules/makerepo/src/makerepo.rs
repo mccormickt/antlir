@@ -96,7 +96,7 @@ impl XmlFile<BufWriter<File>> {
             _ => unreachable!("only these three file names exist"),
         };
         let mut xml = XmlWriter::new_with_indent(inner, b' ', 2);
-        let mut start = BytesStart::borrowed_name(element.as_bytes());
+        let mut start = BytesStart::new(element);
         match basename {
             "primary" => {
                 start.push_attribute(("xmlns", "http://linux.duke.edu/metadata/common"));
@@ -132,7 +132,7 @@ impl<W: Write> XmlFile<W> {
 
     fn finish(self) -> Result<RepomdRecord> {
         let mut xml = XmlWriter::new(self.inner);
-        xml.write_event(Event::End(BytesEnd::borrowed(self.element.as_bytes())))?;
+        xml.write_event(Event::End(BytesEnd::new(self.element)))?;
         let inner = xml.into_inner();
         match inner {
             XmlFileInner::Gzipped(w) => {
@@ -251,17 +251,33 @@ fn main() -> Result<()> {
         .write_inner_content(|w| {
             w.create_element("data")
                 .with_attribute(("type", "primary"))
-                .write_inner_content(|w| primary.write(w))?;
+                .write_inner_content(|w| {
+                    primary
+                        .write(w)
+                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+                })?;
             w.create_element("data")
                 .with_attribute(("type", "filelists"))
-                .write_inner_content(|w| filelists.write(w))?;
+                .write_inner_content(|w| {
+                    filelists
+                        .write(w)
+                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+                })?;
             w.create_element("data")
                 .with_attribute(("type", "other"))
-                .write_inner_content(|w| other.write(w))?;
+                .write_inner_content(|w| {
+                    other
+                        .write(w)
+                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+                })?;
             if let Some(modulemd) = &modulemd {
                 w.create_element("data")
                     .with_attribute(("type", "modules"))
-                    .write_inner_content(|w| modulemd.write(w))?;
+                    .write_inner_content(|w| {
+                        modulemd
+                            .write(w)
+                            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+                    })?;
             }
             Ok(())
         })?;
