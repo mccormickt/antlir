@@ -17,6 +17,7 @@ use std::fmt::Debug;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::hash::Hasher;
+use std::io::BufReader;
 use std::io::Cursor;
 use std::io::Read;
 use std::marker::PhantomData;
@@ -168,7 +169,12 @@ where
     type Err = std::io::Error;
 
     fn from_str(path: &str) -> std::io::Result<Self> {
-        let f = std::io::BufReader::new(std::fs::File::open(path)?);
+        let f: Box<dyn std::io::Read> = if path == "-" {
+            Box::new(std::io::stdin())
+        } else {
+            Box::new(std::fs::File::open(path)?)
+        };
+        let f = BufReader::new(f);
         D::deserialize(f)
             .map(|value| Self {
                 path: path.into(),
