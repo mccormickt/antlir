@@ -62,7 +62,6 @@ def _machine_json(ctx: AnalysisContext) -> (Artifact, typing.Any):
             "serial_index": ctx.attrs.serial_index,
             "sidecar_services": ctx.attrs.sidecar_services,
             "systemd_credentials": ctx.attrs.systemd_credentials,
-            "use_legacy_share": ctx.attrs.use_legacy_share,
             "use_tpm": ctx.attrs.use_tpm,
         },
         with_inputs = True,
@@ -131,10 +130,6 @@ _vm_host = rule(
         "tty_name": attrs.default_only(
             attrs.string(default = TTY_NAME),
             doc = "arch dependent name of the console device",
-        ),
-        "use_legacy_share": attrs.bool(
-            default = False,
-            doc = "use 9p instead of virtiofs for sharing for older kernels",
         ),
         "use_tpm": attrs.bool(default = False, doc = "enable software TPM"),
     } | {

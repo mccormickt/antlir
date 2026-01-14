@@ -41,7 +41,6 @@ use tracing_subscriber::prelude::*;
 
 use crate::isolation::Platform;
 use crate::isolation::isolated;
-use crate::share::NinePShare;
 use crate::share::VirtiofsShare;
 use crate::types::MachineOpts;
 use crate::types::MountPlatformDecision;
@@ -131,11 +130,7 @@ fn run(args: &RunCmdArgs) -> Result<()> {
     }
 
     let machine_opts = args.machine_spec.clone().into_inner();
-    let result = if machine_opts.use_legacy_share {
-        VM::<NinePShare>::new(machine_opts, vm_args)?.run()
-    } else {
-        VM::<VirtiofsShare>::new(machine_opts, vm_args)?.run()
-    };
+    let result = VM::<VirtiofsShare>::new(machine_opts, vm_args)?.run();
 
     if !args.expect_failure {
         result?;
