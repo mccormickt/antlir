@@ -60,8 +60,17 @@ pub(crate) fn run(
 
         setenv.insert(key, var);
     }
-    if let Ok(rust_log) = std::env::var("RUST_LOG") {
-        setenv.insert("RUST_LOG".into(), rust_log);
+
+    // Passing throough a few commonly-used environment variables into the container
+    // Example usage: buck2 test //target -- --env ANTLIR_EXTRA_TEST_ARGS=--nocapture --env RUST_LOG=trace ...
+    for maybe_pass in [
+        "RUST_LOG",
+        "ANTLIR_EXTRA_TEST_ARGS",
+        "ANTLIR_STREAM_TO_CONSOLE",
+    ] {
+        if let Ok(val) = std::env::var(maybe_pass) {
+            setenv.insert(maybe_pass.into(), val);
+        }
     }
 
     let working_directory = std::env::current_dir().context("while getting cwd")?;
