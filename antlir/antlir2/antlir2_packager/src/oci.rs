@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::BufWriter;
@@ -15,6 +16,10 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use antlir2_facts::Fact;
+use antlir2_facts::Key;
+use antlir2_facts::RoDatabase;
+use antlir2_facts::fact_impl;
 use anyhow::Context;
 use anyhow::Result;
 use cap_std::fs::Dir;
@@ -37,6 +42,21 @@ use serde::Serialize;
 use sha2::Digest;
 use sha2::Sha256;
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+pub struct OciLabel {
+    key: String,
+    value: String,
+}
+
+#[fact_impl("antlir2_packager::oci::OciLabel")]
+impl Fact for OciLabel {
+    fn key(&self) -> Key {
+        // instead of just using the key, use the full key=value pair to be able
+        // to see any conflicts later on
+        format!("{}={}", self.key, self.value).into()
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Oci {
@@ -45,6 +65,7 @@ pub struct Oci {
     refname: String,
     target_arch: Arch,
     entrypoint: Vec<String>,
+    facts_db: PathBuf,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -162,6 +183,20 @@ impl Oci {
             rootfs_digest_chain.push(format!("sha256:{layer_hash}"));
         }
 
+        let facts_db = RoDatabase::open(&self.facts_db)
+            .with_context(|| format!("while opening facts db '{}'", self.facts_db.display()))?;
+        let mut labels = HashMap::new();
+        for label in facts_db.iter::<OciLabel>()? {
+            if labels.contains_key(&label.key) {
+                anyhow::bail!(
+                    "duplicate label '{}', already set to '{}'",
+                    label.key,
+                    labels[&label.key]
+                );
+            }
+            labels.insert(label.key.clone(), label.value.clone());
+        }
+
         let image_configuration = ImageConfigurationBuilder::default()
             .architecture(self.target_arch.clone())
             .os("linux")
@@ -169,6 +204,7 @@ impl Oci {
             .config(
                 ConfigBuilder::default()
                     .entrypoint(self.entrypoint.clone())
+                    .labels(labels)
                     .build()
                     .context("while building image config")?,
             )

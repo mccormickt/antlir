@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import json
 import os
 import re
 import subprocess
@@ -57,3 +58,22 @@ class Test(TestCase):
             "Entrypoint!\n555 0 0\nstat: cannot statx '/to-be-deleted': No such file or directory\nrecreated\n",
             proc.stdout,
         )
+
+    def test_image_has_labels(self) -> None:
+        """Verify that the image contains the expected labels."""
+        image_id = self.load_image()
+
+        # Inspect the image to get labels
+        proc = subprocess.run(
+            ["podman", "inspect", image_id, "--format", "{{json .Config.Labels}}"],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        labels = json.loads(proc.stdout.strip())
+        self.assertIsNotNone(labels, "Image should have labels")
+        self.assertIn("com.meta.test.label", labels)
+        self.assertEqual(labels["com.meta.test.label"], "test-value")
+        self.assertIn("com.meta.test.another", labels)
+        self.assertEqual(labels["com.meta.test.another"], "another-value")

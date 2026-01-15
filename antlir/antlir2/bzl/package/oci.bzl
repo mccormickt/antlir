@@ -112,6 +112,7 @@ def _impl(ctx: AnalysisContext) -> Promise:
             {"oci": {
                 "deltas": deltas,
                 "entrypoint": ctx.attrs.entrypoint,
+                "facts_db": ctx.attrs.layer[LayerInfo].facts_db,
                 "ref": ctx.attrs.ref,
                 "target_arch": ctx.attrs._target_arch,
             }},

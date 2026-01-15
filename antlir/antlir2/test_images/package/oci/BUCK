@@ -2,6 +2,7 @@
 load("//antlir/antlir2/bzl/feature:defs.bzl", "feature")
 load("//antlir/antlir2/bzl/image:defs.bzl", "image")
 load("//antlir/antlir2/bzl/package:oci.bzl", "oci")
+load("//antlir/antlir2/features/oci:oci.bzl", "oci_features")
 load("//antlir/antlir2/testing:image_test.bzl", "image_python_test")
 
 oncall("antlir")
@@ -17,6 +18,10 @@ image.layer(
         feature.install_text(
             dst = "/to-be-deleted-and-recreated",
             text = "to-be-deleted-and-recreated",
+        ),
+        oci_features.label(
+            key = "com.meta.test.label",
+            value = "test-value",
         ),
     ],
 )
@@ -51,6 +56,10 @@ stat --format="%a %u %g" /entrypoint.sh
 stat /to-be-deleted 2>&1 || true
 cat /to-be-deleted-and-recreated
 """,
+        ),
+        oci_features.label(
+            key = "com.meta.test.another",
+            value = "another-value",
         ),
     ],
     parent_layer = ":intermediate",
