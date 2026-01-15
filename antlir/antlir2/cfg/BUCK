@@ -1,13 +1,25 @@
-load("@prelude//:rules.bzl", "constraint_setting", "constraint_value")
+load("@fbsource//tools/build_defs:fb_native_wrapper.bzl", "fb_native")
+load("@prelude//:rules.bzl", "constraint")
 
 oncall("antlir")
 
-constraint_setting(
+constraint(
     name = "working_format",
+    default = "btrfs",
+    values = [
+        "btrfs",
+        "none",
+    ],
     visibility = ["PUBLIC"],
 )
 
-constraint_value(
+# Backwards compatibility aliases - will be removed incrementally
+fb_native.configuration_alias(
     name = "btrfs",
-    constraint_setting = ":working_format",
+    actual = ":working_format[btrfs]",
+)
+
+fb_native.configuration_alias(
+    name = "none",
+    actual = ":working_format[none]",
 )
