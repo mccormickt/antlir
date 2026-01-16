@@ -251,33 +251,17 @@ fn main() -> Result<()> {
         .write_inner_content(|w| {
             w.create_element("data")
                 .with_attribute(("type", "primary"))
-                .write_inner_content(|w| {
-                    primary
-                        .write(w)
-                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
-                })?;
+                .write_inner_content(|w| primary.write(w).map_err(std::io::Error::other))?;
             w.create_element("data")
                 .with_attribute(("type", "filelists"))
-                .write_inner_content(|w| {
-                    filelists
-                        .write(w)
-                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
-                })?;
+                .write_inner_content(|w| filelists.write(w).map_err(std::io::Error::other))?;
             w.create_element("data")
                 .with_attribute(("type", "other"))
-                .write_inner_content(|w| {
-                    other
-                        .write(w)
-                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
-                })?;
+                .write_inner_content(|w| other.write(w).map_err(std::io::Error::other))?;
             if let Some(modulemd) = &modulemd {
                 w.create_element("data")
                     .with_attribute(("type", "modules"))
-                    .write_inner_content(|w| {
-                        modulemd
-                            .write(w)
-                            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
-                    })?;
+                    .write_inner_content(|w| modulemd.write(w).map_err(std::io::Error::other))?;
             }
             Ok(())
         })?;
