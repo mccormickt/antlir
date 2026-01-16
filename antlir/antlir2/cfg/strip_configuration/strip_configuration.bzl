@@ -22,14 +22,32 @@
 
 def _strip_configuration_impl(ctx: AnalysisContext) -> list[Provider]:
     plat = ctx.attrs._stripped_platform[PlatformInfo]
+    keep_constraints = ctx.attrs.keep_constraints
+
+    def _impl(platform: PlatformInfo) -> PlatformInfo:
+        constraints = dict(plat.configuration.constraints)
+        for constraint in keep_constraints:
+            label = constraint[ConstraintSettingInfo].label
+            if label in platform.configuration.constraints:
+                constraints[label] = platform.configuration.constraints[label]
+
+        return PlatformInfo(
+            label = plat.label,
+            configuration = ConfigurationInfo(
+                constraints = constraints,
+                values = plat.configuration.values,
+            ),
+        )
+
     return [
         DefaultInfo(),
-        TransitionInfo(impl = lambda platform: plat),
+        TransitionInfo(impl = _impl),
     ]
 
 strip_configuration = rule(
     impl = _strip_configuration_impl,
     attrs = {
+        "keep_constraints": attrs.list(attrs.dep(providers = [ConstraintSettingInfo]), default = []),
         "_stripped_platform": attrs.default_only(attrs.dep(default = "antlir//antlir/antlir2/cfg/strip_configuration:empty-platform")),
     },
     is_configuration_rule = True,

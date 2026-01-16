@@ -12,3 +12,10 @@ platform(
 strip_configuration(
     name = "strip-configuration",
 )
+
+strip_configuration(
+    name = "arch-only",
+    keep_constraints = [
+        "ovr_config//cpu/constraints:cpu",
+    ],
+)
