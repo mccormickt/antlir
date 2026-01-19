@@ -66,12 +66,12 @@ class TestShape(unittest.TestCase):
         # load the same thing from a file path
         with importlib.resources.path(__package__, "data.json") as path:
             f = hashable_t.load(path)
-        self.assertEqual(f, res)
+        self.assertDictEqual(dict(f), dict(res))
         # lastly, the directly imported python_data version should also be
         # equivalent
         from antlir.bzl.tests.shapes.data import data as imp
 
-        self.assertEqual(imp, res)
+        self.assertDictEqual(dict(imp), dict(res))
         self.assertTrue(isinstance(imp, hashable_t))
 
     def test_json_file_targets(self):
