@@ -10,6 +10,7 @@
 
 #![feature(exit_status_error)]
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::fmt::Write;
 use std::process::Command;
 
@@ -21,7 +22,21 @@ use signedsource::Comment;
 
 #[derive(Deserialize)]
 struct Labels {
-    labels: Vec<String>,
+    labels: Vec<BuckLabel>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum BuckLabel {
+    StringLabel(String),
+    Selector(Selector),
+}
+
+#[derive(Deserialize)]
+pub struct Selector {
+    #[serde(rename = "__type")]
+    pub type_field: String,
+    pub entries: HashMap<String, String>,
 }
 
 #[derive(Deserialize)]
@@ -57,7 +72,12 @@ fn gen_modules_bzl() -> Result<String> {
         let detail_json = labels
             .labels
             .into_iter()
-            .filter_map(|l| l.strip_prefix("antlir-rust-extension=").map(str::to_string))
+            .filter_map(|l| match l {
+                BuckLabel::StringLabel(l) => {
+                    l.strip_prefix("antlir-rust-extension=").map(str::to_string)
+                }
+                _ => None,
+            })
             .next()
             .context("missing antlir-rust-extension label")?;
         let details: ModuleDetails = serde_json::from_str(&detail_json)
