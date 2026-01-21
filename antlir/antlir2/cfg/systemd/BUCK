@@ -1,26 +1,41 @@
-load("@prelude//:rules.bzl", "constraint_setting", "constraint_value")
+load("@fbsource//tools/build_defs:fb_native_wrapper.bzl", "fb_native")
+load("@prelude//:rules.bzl", "constraint")
 
 oncall("antlir")
 
-constraint_setting(
+constraint(
     name = "systemd-setting",
+    default = "unconfigured",
+    values = [
+        "unconfigured",
+        "systemd-cd",
+        "systemd-stable",
+        "systemd-canary",
+    ],
     visibility = ["PUBLIC"],
 )
 
-constraint_value(
+# Backwards compatibility aliases - will be removed incrementally
+fb_native.configuration_alias(
+    name = "unconfigured",
+    actual = ":systemd-setting[unconfigured]",
+    visibility = ["PUBLIC"],
+)
+
+fb_native.configuration_alias(
     name = "systemd-cd",
-    constraint_setting = ":systemd-setting",
+    actual = ":systemd-setting[systemd-cd]",
     visibility = ["PUBLIC"],
 )
 
-constraint_value(
+fb_native.configuration_alias(
     name = "systemd-stable",
-    constraint_setting = ":systemd-setting",
+    actual = ":systemd-setting[systemd-stable]",
     visibility = ["PUBLIC"],
 )
 
-constraint_value(
+fb_native.configuration_alias(
     name = "systemd-canary",
-    constraint_setting = ":systemd-setting",
+    actual = ":systemd-setting[systemd-canary]",
     visibility = ["PUBLIC"],
 )
