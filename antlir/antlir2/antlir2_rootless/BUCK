@@ -1,4 +1,5 @@
-load("@prelude//:rules.bzl", "constraint_setting", "constraint_value")
+load("@fbsource//tools/build_defs:fb_native_wrapper.bzl", "fb_native")
+load("@prelude//:rules.bzl", "constraint")
 load("//antlir/bzl:build_defs.bzl", "rust_binary", "rust_library")
 
 oncall("antlir")
@@ -31,19 +32,25 @@ rust_binary(
     ],
 )
 
-constraint_setting(
+constraint(
     name = "config",
+    default = "rootless",
+    values = [
+        "rootless",
+        "rooted",
+    ],
     visibility = ["PUBLIC"],
 )
 
-constraint_value(
+# Backwards compatibility aliases - will be removed incrementally
+fb_native.configuration_alias(
     name = "rootless",
-    constraint_setting = ":config",
+    actual = ":config[rootless]",
     visibility = ["PUBLIC"],
 )
 
-constraint_value(
+fb_native.configuration_alias(
     name = "rooted",
-    constraint_setting = ":config",
+    actual = ":config[rooted]",
     visibility = ["PUBLIC"],
 )
