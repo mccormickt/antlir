@@ -70,6 +70,7 @@ load("//antlir/antlir2/features/group:group.bzl", "group_rule")
 load("//antlir/antlir2/features/hardlink:hardlink.bzl", "hardlink_rule")
 load("//antlir/antlir2/features/install:install.bzl", "install_rule")
 load("//antlir/antlir2/features/mount:mount.bzl", "mount_rule")
+load("//antlir/antlir2/features/oci/oci_env:oci_env.bzl", "oci_env_rule")
 load("//antlir/antlir2/features/oci/oci_label:oci_label.bzl", "oci_label_rule")
 load("//antlir/antlir2/features/remove:remove.bzl", "remove_rule")
 load("//antlir/antlir2/features/requires:requires.bzl", "requires_rule")
@@ -104,6 +105,7 @@ _anon_rules = {
     "hardlink": hardlink_rule,
     "install": install_rule,
     "mount": mount_rule,
+    "oci/oci_env": oci_env_rule,
     "oci/oci_label": oci_label_rule,
     "remove": remove_rule,
     "requires": requires_rule,

@@ -23,6 +23,10 @@ image.layer(
             key = "com.meta.test.label",
             value = "test-value",
         ),
+        oci_features.env(
+            key = "HHVM_DISABLE_PERSONALITY",
+            value = "1",
+        ),
     ],
 )
 
@@ -60,6 +64,10 @@ cat /to-be-deleted-and-recreated
         oci_features.label(
             key = "com.meta.test.another",
             value = "another-value",
+        ),
+        oci_features.env(
+            key = "TEST_ENV_VAR",
+            value = "test-value",
         ),
     ],
     parent_layer = ":intermediate",

@@ -57,6 +57,20 @@ impl Fact for OciLabel {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+pub struct OciEnv {
+    key: String,
+    value: String,
+}
+
+#[fact_impl("antlir2_packager::oci::OciEnv")]
+impl Fact for OciEnv {
+    fn key(&self) -> Key {
+        // use the full KEY=VALUE pair to be able to see any conflicts later on
+        format!("{}={}", self.key, self.value).into()
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Oci {
@@ -197,6 +211,22 @@ impl Oci {
             labels.insert(label.key.clone(), label.value.clone());
         }
 
+        let mut env_map = HashMap::new();
+        for env in facts_db.iter::<OciEnv>()? {
+            if env_map.contains_key(&env.key) {
+                anyhow::bail!(
+                    "duplicate env '{}', already set to '{}'",
+                    env.key,
+                    env_map[&env.key]
+                );
+            }
+            env_map.insert(env.key.clone(), env.value.clone());
+        }
+        let env_list: Vec<String> = env_map
+            .into_iter()
+            .map(|(k, v)| format!("{}={}", k, v))
+            .collect();
+
         let image_configuration = ImageConfigurationBuilder::default()
             .architecture(self.target_arch.clone())
             .os("linux")
@@ -205,6 +235,7 @@ impl Oci {
                 ConfigBuilder::default()
                     .entrypoint(self.entrypoint.clone())
                     .labels(labels)
+                    .env(env_list)
                     .build()
                     .context("while building image config")?,
             )

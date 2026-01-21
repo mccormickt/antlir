@@ -77,3 +77,20 @@ class Test(TestCase):
         self.assertEqual(labels["com.meta.test.label"], "test-value")
         self.assertIn("com.meta.test.another", labels)
         self.assertEqual(labels["com.meta.test.another"], "another-value")
+
+    def test_image_has_env(self) -> None:
+        """Verify that the image contains the expected environment variables."""
+        image_id = self.load_image()
+
+        # Inspect the image to get env
+        proc = subprocess.run(
+            ["podman", "inspect", image_id, "--format", "{{json .Config.Env}}"],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        env_list = json.loads(proc.stdout.strip())
+        self.assertIsNotNone(env_list, "Image should have environment variables")
+        self.assertIn("HHVM_DISABLE_PERSONALITY=1", env_list)
+        self.assertIn("TEST_ENV_VAR=test-value", env_list)
