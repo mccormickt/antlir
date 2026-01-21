@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 _refs = {
-    "rooted": "antlir//antlir/antlir2/antlir2_rootless:rooted",
+    "rooted": "antlir//antlir/antlir2/antlir2_rootless:config[rooted]",
 }
 
 _attrs = {
@@ -34,7 +34,7 @@ def _transition(*, refs, attrs, constraints, overwrite: bool = False):
 
 _is_rootless_select = select({
     "DEFAULT": True,
-    "antlir//antlir/antlir2/antlir2_rootless:rooted": False,
+    "antlir//antlir/antlir2/antlir2_rootless:config[rooted]": False,
 })
 
 def _transition_impl(platform, refs, attrs):

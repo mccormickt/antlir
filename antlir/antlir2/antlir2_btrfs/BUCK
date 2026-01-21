@@ -50,7 +50,7 @@ image_rust_test(
     target_compatible_with = [
         "ovr_config//cpu:x86_64",
         "ovr_config//os:linux",
-        "//antlir/antlir2/antlir2_rootless:rooted",
+        "//antlir/antlir2/antlir2_rootless:config[rooted]",
     ],
     deps = deps,
 )
@@ -65,7 +65,7 @@ image_rust_test(
     target_compatible_with = [
         "ovr_config//cpu:x86_64",
         "ovr_config//os:linux",
-        "//antlir/antlir2/antlir2_rootless:rooted",
+        "//antlir/antlir2/antlir2_rootless:config[rooted]",
     ],
     deps = deps,
 )

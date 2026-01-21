@@ -292,7 +292,7 @@ def _implicit_image_test(
     if rootless == False:
         target_compatible_with = selects.apply(
             target_compatible_with or [],
-            lambda tcw: tcw + ["antlir//antlir/antlir2/antlir2_rootless:rooted"],
+            lambda tcw: tcw + ["antlir//antlir/antlir2/antlir2_rootless:config[rooted]"],
         )
         labels = selects.apply(labels, lambda labels: labels + ["uses_sudo"])
 
