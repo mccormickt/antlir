@@ -1,33 +1,41 @@
-load("@prelude//:rules.bzl", "constraint_setting", "constraint_value")
+load("@fbsource//tools/build_defs:fb_native_wrapper.bzl", "fb_native")
+load("@prelude//:rules.bzl", "constraint")
 
 oncall("antlir")
 
-constraint_setting(
+constraint(
     name = "family",
+    default = "none",
+    values = [
+        "none",
+        "centos",
+        "fedora",
+        "rhel",
+    ],
     visibility = ["PUBLIC"],
 )
 
-constraint_value(
+# Backwards compatibility aliases - will be removed incrementally
+fb_native.configuration_alias(
     name = "none",
-    constraint_setting = ":family",
+    actual = ":family[none]",
     visibility = ["PUBLIC"],
 )
 
-# Any version of CentOS.
-constraint_value(
+fb_native.configuration_alias(
     name = "centos",
-    constraint_setting = ":family",
+    actual = ":family[centos]",
     visibility = ["PUBLIC"],
 )
 
-constraint_value(
+fb_native.configuration_alias(
     name = "fedora",
-    constraint_setting = ":family",
+    actual = ":family[fedora]",
     visibility = ["PUBLIC"],
 )
 
-constraint_value(
+fb_native.configuration_alias(
     name = "rhel",
-    constraint_setting = ":family",
+    actual = ":family[rhel]",
     visibility = ["PUBLIC"],
 )
