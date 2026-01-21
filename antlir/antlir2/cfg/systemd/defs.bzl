@@ -36,7 +36,7 @@ systemd_cfg = struct(
         "systemd_canary": "antlir//antlir/antlir2/cfg/systemd:systemd-canary",
         "systemd_cd": "antlir//antlir/antlir2/cfg/systemd:systemd-setting[systemd-cd]",
         "systemd_setting": "antlir//antlir/antlir2/cfg/systemd:systemd-setting",
-        "systemd_stable": "antlir//antlir/antlir2/cfg/systemd:systemd-stable",
+        "systemd_stable": "antlir//antlir/antlir2/cfg/systemd:systemd-setting[systemd-stable]",
     },
     attrs = {
         "systemd": attrs.enum(
