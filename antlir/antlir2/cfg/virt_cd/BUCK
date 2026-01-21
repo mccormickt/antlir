@@ -1,14 +1,27 @@
-load("@prelude//:rules.bzl", "constraint_setting", "constraint_value")
+load("@fbsource//tools/build_defs:fb_native_wrapper.bzl", "fb_native")
+load("@prelude//:rules.bzl", "constraint")
 
 oncall("antlir")
 
-constraint_setting(
+constraint(
     name = "virt-setting",
+    default = "none",
+    values = [
+        "none",
+        "virt-cd",
+    ],
     visibility = ["PUBLIC"],
 )
 
-constraint_value(
+# Backwards compatibility aliases - will be removed incrementally
+fb_native.configuration_alias(
+    name = "none",
+    actual = ":virt-setting[none]",
+    visibility = ["PUBLIC"],
+)
+
+fb_native.configuration_alias(
     name = "virt-cd",
-    constraint_setting = ":virt-setting",
+    actual = ":virt-setting[virt-cd]",
     visibility = ["PUBLIC"],
 )
