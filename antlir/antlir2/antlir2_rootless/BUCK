@@ -44,12 +44,6 @@ constraint(
 
 # Backwards compatibility aliases - will be removed incrementally
 fb_native.configuration_alias(
-    name = "rootless",
-    actual = ":config[rootless]",
-    visibility = ["PUBLIC"],
-)
-
-fb_native.configuration_alias(
     name = "rooted",
     actual = ":config[rooted]",
     visibility = ["PUBLIC"],
