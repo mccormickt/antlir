@@ -23,12 +23,6 @@ fb_native.configuration_alias(
 )
 
 fb_native.configuration_alias(
-    name = "systemd-cd",
-    actual = ":systemd-setting[systemd-cd]",
-    visibility = ["PUBLIC"],
-)
-
-fb_native.configuration_alias(
     name = "systemd-stable",
     actual = ":systemd-setting[systemd-stable]",
     visibility = ["PUBLIC"],
