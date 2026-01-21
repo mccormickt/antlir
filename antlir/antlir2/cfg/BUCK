@@ -1,4 +1,3 @@
-load("@fbsource//tools/build_defs:fb_native_wrapper.bzl", "fb_native")
 load("@prelude//:rules.bzl", "constraint")
 
 oncall("antlir")
@@ -11,15 +10,4 @@ constraint(
         "none",
     ],
     visibility = ["PUBLIC"],
-)
-
-# Backwards compatibility aliases - will be removed incrementally
-fb_native.configuration_alias(
-    name = "btrfs",
-    actual = ":working_format[btrfs]",
-)
-
-fb_native.configuration_alias(
-    name = "none",
-    actual = ":working_format[none]",
 )
