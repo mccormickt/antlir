@@ -52,7 +52,7 @@ def attrs_selected_by_cfg():
         "_working_format": attrs.default_only(attrs.string(
             default = select({
                 "DEFAULT": "btrfs",
-                "antlir//antlir/antlir2/cfg:btrfs": "btrfs",
+                "antlir//antlir/antlir2/cfg:working_format[btrfs]": "btrfs",
             }),
         )),
     }
@@ -109,7 +109,7 @@ layer_cfg = transition(
         "package_manager_constraint": "antlir//antlir/antlir2/os/package_manager:package_manager",
         "package_manager_dnf": "antlir//antlir/antlir2/os/package_manager:dnf",
         "working_format": "antlir//antlir/antlir2/cfg:working_format",
-        "working_format.btrfs": "antlir//antlir/antlir2/cfg:btrfs",
+        "working_format.btrfs": "antlir//antlir/antlir2/cfg:working_format[btrfs]",
     } | (
         # @oss-disable[end= ]: fb_refs
         {} # @oss-enable

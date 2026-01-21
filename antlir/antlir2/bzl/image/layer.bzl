@@ -592,7 +592,7 @@ _layer_attrs = {
     "_working_format": attrs.default_only(attrs.string(
         default = select({
             "DEFAULT": "btrfs",
-            "antlir//antlir/antlir2/cfg:btrfs": "btrfs",
+            "antlir//antlir/antlir2/cfg:working_format[btrfs]": "btrfs",
         }),
     )),
 }
