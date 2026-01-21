@@ -11,7 +11,7 @@ constraint_setting(
 os_version(
     name = "none",
     family = "//antlir/antlir2/os/family:family[none]",
-    package_manager = "//antlir/antlir2/os/package_manager:none",
+    package_manager = "//antlir/antlir2/os/package_manager:package_manager[none]",
 )
 
 os_version(
