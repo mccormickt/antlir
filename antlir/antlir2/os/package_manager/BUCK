@@ -1,4 +1,3 @@
-load("@fbsource//tools/build_defs:fb_native_wrapper.bzl", "fb_native")
 load("@prelude//:rules.bzl", "constraint")
 
 oncall("antlir")
@@ -12,11 +11,4 @@ constraint(
         "dnf5",
     ],
     visibility = ["PUBLIC"],
-)
-
-# Backwards compatibility aliases - will be removed incrementally
-fb_native.configuration_alias(
-    name = "dnf5",
-    actual = ":package_manager[dnf5]",
-    visibility = ["//antlir/antlir2/os:"],
 )
