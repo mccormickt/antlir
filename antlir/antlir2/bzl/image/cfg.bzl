@@ -107,7 +107,7 @@ layer_cfg = transition(
     impl = _impl,
     refs = {
         "package_manager_constraint": "antlir//antlir/antlir2/os/package_manager:package_manager",
-        "package_manager_dnf": "antlir//antlir/antlir2/os/package_manager:dnf",
+        "package_manager_dnf": "antlir//antlir/antlir2/os/package_manager:package_manager[dnf]",
         "working_format": "antlir//antlir/antlir2/cfg:working_format",
         "working_format.btrfs": "antlir//antlir/antlir2/cfg:working_format[btrfs]",
     } | (

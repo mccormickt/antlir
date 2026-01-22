@@ -39,8 +39,8 @@ def test_rpms(
         name = name + "--script",
         exe = "//antlir/antlir2/features/rpm/tests:test-installed-rpms",
         args = ["--expected", json.encode(expected), select({
-            "//antlir/antlir2/os/package_manager:dnf": "--dnf-version=dnf4",
             "//antlir/antlir2/os/package_manager:dnf5": "--dnf-version=dnf5",
+            "//antlir/antlir2/os/package_manager:package_manager[dnf]": "--dnf-version=dnf4",
             "DEFAULT": "none",
         })],
     )
