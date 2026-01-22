@@ -17,12 +17,6 @@ constraint(
 
 # Backwards compatibility aliases - will be removed incrementally
 fb_native.configuration_alias(
-    name = "none",
-    actual = ":family[none]",
-    visibility = ["PUBLIC"],
-)
-
-fb_native.configuration_alias(
     name = "centos",
     actual = ":family[centos]",
     visibility = ["PUBLIC"],
