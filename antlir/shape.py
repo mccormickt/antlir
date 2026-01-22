@@ -11,6 +11,7 @@
 import enum
 import importlib.resources
 import os
+import sys
 from typing import Type, TypeVar, Union
 
 from antlir.freeze import DoNotFreeze, freeze
@@ -27,8 +28,41 @@ except ImportError:  # pragma: no cover
 S = TypeVar("S")
 
 
+def _get_annotations_py314(dct: dict) -> dict:  # pragma: no cover
+    """
+    In Python 3.14+, annotations are lazily evaluated via __annotate__.
+    Pydantic v1 expects __annotations__ to be populated in the class dict.
+    This function evaluates annotations if needed for Python 3.14+ compatibility.
+
+    We use annotationlib.get_annotate_from_class_namespace() because during
+    metaclass __new__, the __annotate__ function is not directly accessible
+    via dct.get("__annotate__") - it requires this special accessor.
+    """
+    if "__annotations__" in dct and dct["__annotations__"]:
+        return dct["__annotations__"]
+
+    # pyre-ignore[21]: could not find annotationlib
+    import annotationlib
+
+    annotate_func = annotationlib.get_annotate_from_class_namespace(dct)
+    if annotate_func is not None:
+        try:
+            return annotate_func(annotationlib.Format.VALUE)
+        except NameError:
+            return annotate_func(annotationlib.Format.FORWARDREF)
+    return {}
+
+
 class ShapeMeta(ModelMetaclass):
     def __new__(metacls, name, bases, dct):  # noqa: B902
+        # Python 3.14+ uses PEP 649 deferred annotation evaluation.
+        # Pydantic v1 expects __annotations__ to be populated, so we need
+        # to explicitly evaluate them before calling the parent metaclass.
+        if sys.version_info >= (3, 14):  # pragma: no cover
+            annotations = _get_annotations_py314(dct)
+            if annotations:
+                dct["__annotations__"] = annotations
+
         cls = super().__new__(metacls, name, bases, dct)
         # Only apply shape meta hacks to generated classes, not user-written
         # subclasses
