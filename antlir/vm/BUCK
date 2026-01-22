@@ -9,3 +9,11 @@ export_file(
         "PUBLIC",
     ],
 )
+
+export_file(
+    name = "mount-generator-virtiofs",
+    src = "mount-generator-virtiofs",
+    visibility = [
+        "PUBLIC",
+    ],
+)

@@ -13,3 +13,15 @@ feature.new(
     )],
     visibility = ["PUBLIC"],
 )
+
+# Install the `antlir.vm` mount generator for setting up virtiofs mounts
+# needed for testing images in vms.
+feature.new(
+    name = "mounts-virtiofs",
+    features = [feature.install(
+        src = "//antlir/vm:mount-generator-virtiofs",
+        dst = "/usr/lib/systemd/system-generators/mount-generator",
+        mode = "a+rx",
+    )],
+    visibility = ["PUBLIC"],
+)

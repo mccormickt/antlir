@@ -11,7 +11,6 @@ use std::fs;
 use std::fs::OpenOptions;
 use std::io::BufRead;
 use std::io::BufReader;
-use std::io::ErrorKind;
 use std::io::Read;
 use std::io::Write;
 use std::net::Shutdown;
@@ -141,7 +140,7 @@ impl<S: Share> VM<S> {
             if let Err(e) = nics[0].try_dump_file(args.eth0_output_file.clone()) {
                 let err = format!("Failed to set eth0 dump file: {:?}", e);
                 warn!(err);
-                // Leave a hint that we could not set the dump file by writting a textual error in the .pcap file.
+                // Leave a hint that we could not set the dump file by writing a textual error in the .pcap file.
                 // This will generate a corrupted .pcap file that an operator can look into to debug and understand what went wrong.
                 if let Some(filename) = args.eth0_output_file.as_ref() {
                     // If any part of this fail, we don't want to fail the VM creation.
@@ -229,9 +228,7 @@ impl<S: Share> VM<S> {
                 Ok(share)
             })
             .collect();
-        let unit_files_dir = state_dir.join("mount_units");
-        fs::create_dir(&unit_files_dir).map_err(VMError::StateDirError)?;
-        let shares = Shares::new(virtiofs_shares?, mem_mb, unit_files_dir)?;
+        let shares = Shares::new(virtiofs_shares?, mem_mb, state_dir.to_path_buf())?;
         shares.generate_unit_files()?;
         Ok(shares)
     }
@@ -824,6 +821,9 @@ mod test {
     use std::net::Shutdown;
     use std::thread;
 
+    use tempfile::TempDir;
+    use tempfile::tempdir;
+
     use super::*;
     use crate::share::VirtiofsShare;
     use crate::types::MountPlatformDecision;
@@ -831,7 +831,8 @@ mod test {
     use crate::types::VMArgs;
     use crate::utils::qemu_args_to_string;
 
-    fn get_vm_no_disk() -> VM<VirtiofsShare> {
+    // Return TempDir along with VM to keep it alive for the duration of the test
+    fn get_vm_no_disk() -> (VM<VirtiofsShare>, TempDir) {
         let machine = MachineOpts {
             cpus: 1,
             mem_mib: 1024,
@@ -839,34 +840,36 @@ mod test {
             ..Default::default()
         };
         let args = VMArgs::default();
+        let state_dir = tempdir().expect("Failed to create tempdir");
         let share_opts = ShareOpts {
             path: PathBuf::from("/path"),
             read_only: true,
             mount_tag: None,
         };
-        let share = VirtiofsShare::new(share_opts, 1, PathBuf::from("/state"));
+        let share = VirtiofsShare::new(share_opts, 1, state_dir.path().to_path_buf());
         let pci_bridges = PCIBridges::new(0).expect("Failed to create PCIBridges");
-        let disks = QCow2Disks::new(&[], &pci_bridges, Path::new("/state/units"))
-            .expect("Failed to create disks");
+        let disks =
+            QCow2Disks::new(&[], &pci_bridges, state_dir.path()).expect("Failed to create disks");
         let nics = VirtualNICs::new(0, 0).expect("Failed to create NICs");
-        VM {
+        let vm = VM {
             machine,
             args,
             pci_bridges,
             disks,
-            shares: Shares::new(vec![share], 1024, PathBuf::from("/state/units"))
+            shares: Shares::new(vec![share], 1024, state_dir.path().to_path_buf())
                 .expect("Failed to create Shares"),
             nics,
-            state_dir: PathBuf::from("/test/path"),
+            state_dir: state_dir.path().to_path_buf(),
             sidecar_handles: vec![],
             tpm: None,
             identifier: "one".to_string(),
-        }
+        };
+        (vm, state_dir)
     }
 
     #[test]
     fn test_arch_emulation_args() {
-        let mut vm = get_vm_no_disk();
+        let (mut vm, _state_dir) = get_vm_no_disk();
         vm.machine.arch = CpuIsa::AARCH64;
         assert_eq!(
             vm.arch_emulation_args(CpuIsa::AARCH64),
@@ -884,7 +887,7 @@ mod test {
 
     #[test]
     fn test_common_qemu_args() {
-        let mut vm = get_vm_no_disk();
+        let (mut vm, _state_dir) = get_vm_no_disk();
         let common_args =
             qemu_args_to_string(&vm.common_qemu_args().expect("Failed to build qemu args"));
         assert!(common_args.contains("-cpu "));
@@ -906,7 +909,7 @@ mod test {
 
     #[test]
     fn test_time_left() {
-        let mut vm = get_vm_no_disk();
+        let (mut vm, _state_dir) = get_vm_no_disk();
 
         // no timeout
         assert_eq!(
@@ -925,7 +928,7 @@ mod test {
 
     #[test]
     fn test_non_boot_qemu_args() {
-        let mut vm = get_vm_no_disk();
+        let (mut vm, _state_dir) = get_vm_no_disk();
         assert_eq!(vm.non_disk_boot_qemu_args(), Vec::<OsString>::new());
 
         vm.machine.non_disk_boot_opts = Some(NonDiskBootOpts {
@@ -942,7 +945,7 @@ mod test {
     #[test]
     fn test_wait_for_timeout_without_command() {
         // Terminate after timeout
-        let mut vm = get_vm_no_disk();
+        let (mut vm, _state_dir) = get_vm_no_disk();
         vm.args.timeout_secs = Some(3);
         let (_send, recv) = UnixStream::pair().expect("Failed to create sockets");
         let start_ts = Instant::now();
@@ -958,7 +961,7 @@ mod test {
         assert!(elapsed > Duration::from_secs(3));
 
         // Terminate before timeout due to closed socket
-        let mut vm = get_vm_no_disk();
+        let (mut vm, _state_dir) = get_vm_no_disk();
         vm.args.timeout_secs = Some(10);
         let (send, recv) = UnixStream::pair().expect("Failed to create sockets");
         let start_ts = Instant::now();
@@ -976,7 +979,7 @@ mod test {
         assert!(elapsed < Duration::from_secs(10));
 
         // Without timeout
-        let mut vm = get_vm_no_disk();
+        let (mut vm, _state_dir) = get_vm_no_disk();
         vm.args.timeout_secs = None;
         let (send, recv) = UnixStream::pair().expect("Failed to create sockets");
         let handle = thread::spawn(move || {
@@ -995,7 +998,7 @@ mod test {
     #[test]
     fn test_wait_for_timeout_with_command() {
         // Command finished before timeout.
-        let mut vm = get_vm_no_disk();
+        let (mut vm, _state_dir) = get_vm_no_disk();
         vm.args.timeout_secs = Some(10);
         let start_ts = Instant::now();
         let handle = thread::spawn(move || {
@@ -1015,7 +1018,7 @@ mod test {
             .expect("Failed to shutdown sender");
 
         // Command exceeded timeout.
-        let mut vm = get_vm_no_disk();
+        let (mut vm, _state_dir) = get_vm_no_disk();
         vm.args.timeout_secs = Some(3);
         let start_ts = Instant::now();
         let handle = thread::spawn(move || {
@@ -1034,7 +1037,7 @@ mod test {
 
     #[test]
     fn test_run_cmd_and_wait() {
-        let mut vm = get_vm_no_disk();
+        let (mut vm, _state_dir) = get_vm_no_disk();
         vm.args.timeout_secs = Some(1);
 
         // timeout
@@ -1066,7 +1069,7 @@ mod test {
 
     #[test]
     fn test_try_wait_vm_proc() {
-        let vm = get_vm_no_disk();
+        let (vm, _state_dir) = get_vm_no_disk();
         let mut child = Command::new("sleep")
             .arg("1")
             .spawn()
@@ -1096,7 +1099,7 @@ mod test {
 
     #[test]
     fn test_sidecar_services_happy() {
-        let mut vm = get_vm_no_disk();
+        let (mut vm, _state_dir) = get_vm_no_disk();
         vm.machine.sidecar_services = vec![
             vec!["sleep".to_string(), "3".to_string()],
             vec!["sleep".to_string(), "5".to_string()],
@@ -1107,7 +1110,7 @@ mod test {
 
     #[test]
     fn test_sidecar_services_early_finish() {
-        let mut vm = get_vm_no_disk();
+        let (mut vm, _state_dir) = get_vm_no_disk();
         vm.machine.sidecar_services = vec![vec!["command_does_not_exist".to_string()]];
         vm.sidecar_handles = vm.spawn_sidecar_services();
         thread::sleep(Duration::from_secs(1));
