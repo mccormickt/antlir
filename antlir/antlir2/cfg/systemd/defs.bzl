@@ -33,7 +33,7 @@ def _transition(
 systemd_cfg = struct(
     transition = _transition,
     refs = {
-        "systemd_canary": "antlir//antlir/antlir2/cfg/systemd:systemd-canary",
+        "systemd_canary": "antlir//antlir/antlir2/cfg/systemd:systemd-setting[systemd-canary]",
         "systemd_cd": "antlir//antlir/antlir2/cfg/systemd:systemd-setting[systemd-cd]",
         "systemd_setting": "antlir//antlir/antlir2/cfg/systemd:systemd-setting",
         "systemd_stable": "antlir//antlir/antlir2/cfg/systemd:systemd-setting[systemd-stable]",
