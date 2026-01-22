@@ -16,12 +16,6 @@ constraint(
 
 # Backwards compatibility aliases - will be removed incrementally
 fb_native.configuration_alias(
-    name = "none",
-    actual = ":package_manager[none]",
-    visibility = ["//antlir/antlir2/os:"],
-)
-
-fb_native.configuration_alias(
     name = "dnf",
     actual = ":package_manager[dnf]",
     visibility = ["//antlir/antlir2/os:"],
