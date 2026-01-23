@@ -73,28 +73,29 @@ fn eval_and_freeze_module(
     deps: &Dependencies,
     ast: AstModule,
 ) -> anyhow::Result<(FrozenModule, SlotMap<TypeId, Arc<ir::Type>>)> {
-    let module = Module::new();
     let globals = bzl_globals().build();
     let registry = TypeRegistryRefCell::default();
-    {
-        let mut evaluator: Evaluator = Evaluator::new(&module);
-        evaluator.set_loader(deps);
-        // Disable the gc so that Value identity is stable. Our modules are
-        // very small and we throw away the Starlark internals as soon as we
-        // convert to the IR, so this is fine.
-        evaluator.disable_gc();
-        evaluator.extra = Some(&registry);
+    let frozen_module = Module::with_temp_heap(|module| {
+        {
+            let mut evaluator: Evaluator = Evaluator::new(&module);
+            evaluator.set_loader(deps);
+            // Disable the gc so that Value identity is stable. Our modules are
+            // very small and we throw away the Starlark internals as soon as we
+            // convert to the IR, so this is fine.
+            evaluator.disable_gc();
+            evaluator.extra = Some(&registry);
 
-        evaluator
-            .eval_module(ast, &globals)
-            .map_err(starlark::Error::into_anyhow)?;
-    }
-    Ok((
-        module
-            .freeze()
-            .freeze_error_context("while freezing module")?,
-        registry.0.into_inner().0,
-    ))
+            evaluator
+                .eval_module(ast, &globals)
+                .map_err(starlark::Error::into_anyhow)?;
+        }
+        Ok::<_, anyhow::Error>(
+            module
+                .freeze()
+                .freeze_error_context("while freezing module")?,
+        )
+    })?;
+    Ok((frozen_module, registry.0.into_inner().0))
 }
 
 slotmap::new_key_type! {
@@ -422,15 +423,16 @@ impl FileLoader for Dependencies {
         // implementation
         if load == "//antlir/bzl:shape.bzl" || load == "@antlir//antlir/bzl:shape.bzl" {
             let ast = AstModule::parse("", "shape = shape_impl".to_string(), &Dialect::Standard)?;
-            let module = Module::new();
-            {
-                let mut evaluator: Evaluator = Evaluator::new(&module);
-                let globals = bzl_globals().with_namespace("shape_impl", shape).build();
-                evaluator
-                    .eval_module(ast, &globals)
-                    .map_err(starlark::Error::into_anyhow)?;
-            }
-            return Ok(module.freeze()?);
+            return Ok(Module::with_temp_heap(|module| {
+                {
+                    let mut evaluator: Evaluator = Evaluator::new(&module);
+                    let globals = bzl_globals().with_namespace("shape_impl", shape).build();
+                    evaluator
+                        .eval_module(ast, &globals)
+                        .map_err(starlark::Error::into_anyhow)?;
+                }
+                Ok::<_, anyhow::Error>(module.freeze()?)
+            })?);
         }
         let load: ir::Target = load
             .strip_suffix(".bzl")
@@ -456,15 +458,16 @@ impl FileLoader for Dependencies {
 }
 
 fn ir_to_module(m: ir::Module) -> anyhow::Result<FrozenModule> {
-    let module = Module::new();
-    for name in m.types.into_keys() {
-        let ty = StarlarkType(Arc::new(ir::Type::Foreign {
-            target: m.target.clone(),
-            name: name.clone(),
-        }));
-        module.set(&name, ty.alloc_value(module.heap()));
-    }
-    Ok(module.freeze()?)
+    Module::with_temp_heap(|module| {
+        for name in m.types.into_keys() {
+            let ty = StarlarkType(Arc::new(ir::Type::Foreign {
+                target: m.target.clone(),
+                name: name.clone(),
+            }));
+            module.set(&name, ty.alloc_value(module.heap()));
+        }
+        Ok::<_, anyhow::Error>(module.freeze()?)
+    })
 }
 
 fn starlark_to_ir(
