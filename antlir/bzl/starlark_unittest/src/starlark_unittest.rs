@@ -188,11 +188,12 @@ impl TestModule {
                 },
                 testfn: TestFn::DynTestFn(Box::new(move || {
                     Module::with_temp_heap(|module| {
+                        let heap = module.heap();
                         let fail_store = FailStore(RefCell::new(None));
                         let mut evaluator = Evaluator::new(&module);
                         evaluator.extra = Some(&fail_store);
                         evaluator
-                            .eval_function(starlark_func.value(), &[], &[])
+                            .eval_function(heap.access_owned_frozen_value(&starlark_func), &[], &[])
                             .expect("test function failed");
                         Ok(())
                     })
