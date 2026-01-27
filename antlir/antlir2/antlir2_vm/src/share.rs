@@ -237,9 +237,10 @@ impl VirtiofsShare {
     }
 }
 
-/// In order to mount shares, we have to share something into the VM
-/// that contains various mount units for mount generator. This struct
-/// represents the initial trojan horse into the VM.
+/// This sets up all the shared directories from the host that need to be accessible by the VM.
+/// There used to be more than one type of `Share` and thus the template, but we only have
+/// `VirtiofsShare` now. Leaving the template here in case we need to migrate to new hotness again
+/// in the future.
 #[derive(Debug)]
 pub(crate) struct Shares<T: Share> {
     /// Directories to be shared into VM
@@ -249,8 +250,11 @@ pub(crate) struct Shares<T: Share> {
     mem_mb: usize,
     /// Directory that holds unit files for other shares
     unit_files_dir: PathBuf,
-    /// VirtiofsShare for exports-virtiofs (unit files directory shared via virtiofs)
-    exports_virtiofs_share: VirtiofsShare,
+    /// VirtiofsShare for setting up the `exports` mount. It contains all the generated unit files
+    /// from `shares`. The guest OS contains a systemd generator that would mount `exports`, copy
+    /// the unit files to the right place and setup dependency links, which instructs systemd to
+    /// setup the mounts for `shares`.
+    exports_share: VirtiofsShare,
 }
 
 impl<T: Share> Shares<T> {
@@ -261,11 +265,11 @@ impl<T: Share> Shares<T> {
         // Create the unit files directory inside state_dir
         let unit_files_dir = state_dir.join("mount_units");
         fs::create_dir(&unit_files_dir).map_err(ShareError::UnitFilesDirError)?;
-        let exports_virtiofs_share = VirtiofsShare::new(
+        let exports_share = VirtiofsShare::new(
             ShareOpts {
                 path: unit_files_dir.clone(),
                 read_only: true,
-                mount_tag: Some("exports-virtiofs".to_string()),
+                mount_tag: Some("exports".to_string()),
             },
             usize::MAX, // Use a large id that won't conflict with user shares
             state_dir,
@@ -274,7 +278,7 @@ impl<T: Share> Shares<T> {
             shares,
             mem_mb,
             unit_files_dir,
-            exports_virtiofs_share,
+            exports_share,
         })
     }
 
@@ -293,27 +297,9 @@ impl<T: Share> Shares<T> {
 
     pub(crate) fn start_shares(&self) -> Result<()> {
         self.shares.iter().try_for_each(|share| share.setup())?;
-        // Start virtiofsd for exports-virtiofs using the VirtiofsShare
-        self.exports_virtiofs_share.start_virtiofsd()?;
+        // Start virtiofsd for exports using the VirtiofsShare
+        self.exports_share.start_virtiofsd()?;
         Ok(())
-    }
-
-    /// Qemu args for sharing mount unit files with the VM.
-    /// Includes both 9p (mount tag: exports) for backwards compatibility
-    /// and virtiofs (mount tag: exports-virtiofs) for the new mount generator.
-    fn setup_share_qemu_args(&self) -> Vec<OsString> {
-        let mut args: Vec<OsString> = [
-            "-virtfs",
-            &format!(
-                "local,path={path},security_model=none,multidevs=remap,mount_tag=exports,readonly=on",
-                path = self.unit_files_dir.to_str().expect("Share path should be string"),
-            ),
-        ]
-        .iter()
-        .map(|x| x.into())
-        .collect();
-        args.extend(self.exports_virtiofs_share.qemu_args());
-        args
     }
 
     /// Required by virtiofsd shares
@@ -333,7 +319,7 @@ impl<T: Share> Shares<T> {
 impl<T: Share> QemuDevice for Shares<T> {
     fn qemu_args(&self) -> Vec<OsString> {
         let mut args: Vec<_> = self.shares.iter().flat_map(|x| x.qemu_args()).collect();
-        args.extend(self.setup_share_qemu_args());
+        args.extend(self.exports_share.qemu_args());
         args.extend(self.memory_file_qemu_args());
         args
     }
@@ -454,16 +440,10 @@ Options=rw"#;
             shares.memory_file_qemu_args().join(OsStr::new(" ")),
             "-object memory-backend-memfd,id=mem,share=on,size=1024M -numa node,memdev=mem",
         );
-        // Test that setup_share_qemu_args includes both 9p and virtiofs args
-        let setup_share_qemu_args = qemu_args_to_string(&shares.setup_share_qemu_args());
-        assert!(setup_share_qemu_args.contains(&format!(
-            "-virtfs local,path={},security_model=none,multidevs=remap,mount_tag=exports,readonly=on",
-            unit_files_dir.display(),
-        )));
-        assert!(setup_share_qemu_args.contains("exports-virtiofs"));
-        assert!(setup_share_qemu_args.contains("vhost-user-fs-pci"));
+        // Test that qemu_args includes virtiofs args for exports
         let qemu_args = qemu_args_to_string(&shares.qemu_args());
-        assert!(qemu_args.contains(&setup_share_qemu_args));
+        assert!(qemu_args.contains("exports"));
+        assert!(qemu_args.contains("vhost-user-fs-pci"));
         let memory_file_qemu_args = qemu_args_to_string(&shares.memory_file_qemu_args());
         assert!(qemu_args.contains(&memory_file_qemu_args));
         shares.shares.iter().for_each(|x| {
