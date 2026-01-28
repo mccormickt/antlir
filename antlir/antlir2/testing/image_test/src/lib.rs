@@ -58,6 +58,42 @@ pub enum Test {
 }
 
 impl Test {
+    /// Post-process parsed arguments to handle gtest flags that may have been
+    /// consumed into test_cmd due to clap's allow_hyphen_values behavior.
+    /// When a variadic positional argument with allow_hyphen_values = true starts
+    /// consuming arguments, it will also consume --gtest_* flags that follow.
+    /// This method extracts those flags from test_cmd and sets the proper fields.
+    pub fn fixup_gtest_args(self) -> Self {
+        match self {
+            Self::Gtest {
+                test,
+                mut output,
+                mut gtest_list_tests,
+                mut test_cmd,
+            } => {
+                // Extract gtest flags that may have been consumed into test_cmd
+                let mut cleaned_cmd = Vec::new();
+                for arg in test_cmd.drain(..) {
+                    let arg_str = arg.to_string_lossy();
+                    if arg_str == "--gtest_list_tests" {
+                        gtest_list_tests = true;
+                    } else if let Some(value) = arg_str.strip_prefix("--gtest_output=") {
+                        output = Some(value.to_string());
+                    } else {
+                        cleaned_cmd.push(arg);
+                    }
+                }
+                Self::Gtest {
+                    test,
+                    output,
+                    gtest_list_tests,
+                    test_cmd: cleaned_cmd,
+                }
+            }
+            other => other,
+        }
+    }
+
     /// Some tests need to write to output paths on the host. Instead of a
     /// complicated fd-passing dance in the name of isolation purity, we just
     /// mount the parent directories of the output files so that the inner test
@@ -415,6 +451,39 @@ mod test {
                 "/path/to/the/test",
                 "--gtest_catch_exceptions=0",
                 "--gtest_filter=foo/bar/baz",
+            ]
+        );
+    }
+
+    #[test]
+    fn test_gtest_fixup_args_after_user_args() {
+        // Test case where gtest flags come AFTER user arguments, which causes
+        // clap to consume them into test_cmd due to allow_hyphen_values = true.
+        // This simulates TPX's command construction where user args come first.
+        let arg = TestArgs::parse_from([
+            "test",
+            "gtest",
+            "/path/to/the/test",
+            "--gtest_catch_exceptions=0", // user arg that starts positional consumption
+            "--gtest_list_tests",         // gets consumed into test_cmd
+            "--gtest_output=json:/foo/bar", // gets consumed into test_cmd
+        ]);
+        // Before fixup, gtest_list_tests is false and output is None because
+        // they were consumed into test_cmd
+        assert!(!arg.test.is_list_tests());
+        assert!(arg.test.output_dirs().is_empty());
+
+        // After fixup, the flags should be properly extracted
+        let fixed = arg.test.fixup_gtest_args();
+        assert!(fixed.is_list_tests());
+        assert_eq!(fixed.output_dirs(), HashSet::from([PathBuf::from("/foo")]),);
+        assert_eq!(
+            fixed.into_inner_cmd(),
+            vec![
+                "/path/to/the/test",
+                "--gtest_catch_exceptions=0",
+                "--gtest_list_tests",
+                "--gtest_output=json:/foo/bar"
             ]
         );
     }
