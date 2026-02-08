@@ -36,13 +36,16 @@ def _impl(ctx: AnalysisContext) -> list[Provider]:
     if ctx.attrs.block_size not in (512, 4096):
         fail("invalid block size: {}".format(ctx.attrs.block_size))
 
+    # If we're building a fbpkg, put its uuid in the gpt header
+    disk_guid = ctx.attrs.disk_guid or native.read_config("build_info", "package_version")
+
     spec_json = ctx.actions.declare_output("spec.json")
     spec = ctx.actions.write_json(
         spec_json,
         {
             "gpt": {
                 "block_size": str(ctx.attrs.block_size),
-                "disk_guid": ctx.attrs.disk_guid,
+                "disk_guid": disk_guid,
                 "partitions": partitions,
             },
         },

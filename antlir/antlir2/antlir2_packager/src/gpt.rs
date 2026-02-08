@@ -127,14 +127,8 @@ impl Gpt {
         let mut gdisk = gpt::GptConfig::default()
             .writable(true)
             .logical_block_size(self.block_size.into())
-            .create_from_device(Box::new(file), None)
+            .create_from_device(Box::new(file), self.disk_guid)
             .context("while creating new gpt")?;
-
-        if let Some(guid) = self.disk_guid {
-            gdisk.update_guid(Some(
-                guid.to_string().parse().context("while re-parsing uuid")?,
-            ))
-        }
 
         for partition in self.partitions.iter() {
             let src_size = ByteSize::b(partition.src.metadata()?.len());
