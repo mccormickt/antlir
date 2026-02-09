@@ -50,6 +50,8 @@ def _machine_json(ctx: AnalysisContext) -> (Artifact, typing.Any):
             "arch": ctx.attrs.arch,
             "cpus": ctx.attrs.cpus,
             "disks": [d[DiskInfo] for d in disks],
+            "extra_qemu_args": ctx.attrs.extra_qemu_args,
+            "machine_type": ctx.attrs.machine_type,
             "max_combined_channels": ctx.attrs.max_combined_channels,
             "mem_mib": ctx.attrs.mem_mib,
             "mount_platform": ctx.attrs.mount_platform,
@@ -59,6 +61,7 @@ def _machine_json(ctx: AnalysisContext) -> (Artifact, typing.Any):
                 "kernel": ctx.attrs.kernel,
             } if ctx.attrs.initrd else None,
             "num_nics": ctx.attrs.num_nics,
+            "qemu_binary": cmd_args(ctx.attrs.qemu_binary, delimiter = ""),
             "serial_index": ctx.attrs.serial_index,
             "sidecar_services": ctx.attrs.sidecar_services,
             "systemd_credentials": ctx.attrs.systemd_credentials,
@@ -139,6 +142,13 @@ _vm_host = rule(
             default = None,
             doc = "kernel command line parameter when booting from initrd",
         ),
+        "extra_qemu_args": attrs.list(
+            attrs.arg(),
+            default = [],
+            doc = "additional raw QEMU arguments appended after all generated arguments. " +
+                  "Useful for custom devices, chardevs, netdevs, etc. that are not natively " +
+                  "supported by the VM framework (e.g., fbnic PCI devices, io_uring test setups).",
+        ),
         "initrd": attrs.option(
             attrs.source(),
             default = None,
@@ -149,9 +159,23 @@ _vm_host = rule(
             default = None,
             doc = "kernel image to boot from when not booting from disk",
         ),
+        "machine_type": attrs.string(
+            default = arch_select(x86_64 = "pc", aarch64 = "virt"),
+            doc = "QEMU machine type (e.g., 'q35', 'virt', 'microvm'). " +
+                  "Defaults to 'pc' for x86_64 and 'virt' for aarch64.",
+        ),
         "mount_platform": attrs.bool(
             default = True,
             doc = "Mount runtime platform (aka /usr/local/fbcode) from the host",
+        ),
+        # Must be an arg() because it needs to accept locations.
+        "qemu_binary": attrs.arg(
+            default = arch_select(
+                x86_64 = "qemu-system-x86_64",
+                aarch64 = "qemu-system-aarch64",
+            ),
+            doc = "path to a QEMU binary. Use $(location) or $(exe) to reference buck targets. " +
+                  "Defaults to 'qemu-system-x86_64' for x86_64 and 'qemu-system-aarch64' for aarch64.",
         ),
         "sidecar_services": attrs.list(
             attrs.arg(),

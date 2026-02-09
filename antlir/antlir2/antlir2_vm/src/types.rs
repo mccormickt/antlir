@@ -284,6 +284,19 @@ pub(crate) struct MachineOpts {
     pub(crate) use_tpm: bool,
     /// Credential KV pairs for systemd
     pub(crate) systemd_credentials: HashMap<String, String>,
+    /// Path to the QEMU binary. This is always set from Buck with architecture-specific
+    /// defaults (qemu-system-x86_64 for x86_64, qemu-system-aarch64 for aarch64).
+    pub(crate) qemu_binary: String,
+    /// QEMU machine type (e.g., "q35", "virt", "microvm").
+    /// This is always set from Buck with architecture-specific defaults
+    /// (pc for x86_64, virt for aarch64).
+    pub(crate) machine_type: String,
+    /// Additional raw QEMU arguments appended after all generated arguments.
+    /// Useful for custom devices, chardevs, netdevs, etc. that are not
+    /// natively supported by the VM framework (e.g., fbnic PCIe devices).
+    /// Each arg is serialized as a single-element list by Buck2's attrs.arg().
+    #[serde(default)]
+    pub(crate) extra_qemu_args: Vec<Vec<String>>,
 }
 
 #[cfg(test)]

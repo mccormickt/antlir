@@ -394,6 +394,20 @@ impl<S: Share> VM<S> {
         Ok(command)
     }
 
+    /// Extra QEMU arguments from the machine spec. These are raw arguments
+    /// that allow advanced device configurations not natively supported by
+    /// the VM framework (e.g., custom PCI devices, chardevs, netdevs).
+    /// Buck2's attrs.arg() serializes each arg as a single-element list,
+    /// so we flatten the nested Vec<Vec<String>> into individual args.
+    fn extra_qemu_args(&self) -> Vec<OsString> {
+        self.machine
+            .extra_qemu_args
+            .iter()
+            .flatten()
+            .map(OsString::from)
+            .collect()
+    }
+
     /// Spawn qemu-system process. It won't immediately start running until we connect
     /// to the notify socket.
     fn spawn_vm(&self) -> Result<Child> {
@@ -409,11 +423,9 @@ impl<S: Share> VM<S> {
         if let Some(tpm) = &self.tpm {
             args.extend(tpm.qemu_args());
         }
+        args.extend(self.extra_qemu_args());
 
-        let mut command = Command::new(match self.machine.arch {
-            CpuIsa::AARCH64 => "qemu-system-aarch64",
-            CpuIsa::X86_64 => "qemu-system-x86_64",
-        });
+        let mut command = Command::new(&self.machine.qemu_binary);
         command = self.redirect_input_output(command)?;
         let command = command.args(&args);
 
@@ -732,10 +744,7 @@ impl<S: Share> VM<S> {
             &mut [
                 // Basic machine info
                 "-machine",
-                match self.machine.arch {
-                    CpuIsa::AARCH64 => "virt",
-                    CpuIsa::X86_64 => "pc",
-                },
+                &self.machine.machine_type,
                 "-smp",
                 &self.machine.cpus.to_string(),
                 "-m",
@@ -837,6 +846,8 @@ mod test {
             cpus: 1,
             mem_mib: 1024,
             num_nics: 1,
+            qemu_binary: "qemu-system-x86_64".to_string(),
+            machine_type: "pc".to_string(),
             ..Default::default()
         };
         let args = VMArgs::default();
@@ -924,6 +935,53 @@ mod test {
         vm.args.timeout_secs = Some(1);
         thread::sleep(Duration::from_secs(1));
         assert!(vm.time_left(start_ts).is_err());
+    }
+
+    #[test]
+    fn test_common_qemu_args_machine_type() {
+        let (mut vm, _state_dir) = get_vm_no_disk();
+
+        // Test x86_64 machine type
+        vm.machine.arch = CpuIsa::X86_64;
+        vm.machine.machine_type = "pc".to_string();
+        let args = qemu_args_to_string(&vm.common_qemu_args().expect("Failed to build qemu args"));
+        assert!(args.contains("-machine pc"));
+
+        // Test aarch64 machine type
+        vm.machine.arch = CpuIsa::AARCH64;
+        vm.machine.machine_type = "virt".to_string();
+        let args = qemu_args_to_string(&vm.common_qemu_args().expect("Failed to build qemu args"));
+        assert!(args.contains("-machine virt"));
+
+        // Test custom machine type
+        vm.machine.machine_type = "q35".to_string();
+        let args = qemu_args_to_string(&vm.common_qemu_args().expect("Failed to build qemu args"));
+        assert!(args.contains("-machine q35"));
+    }
+
+    #[test]
+    fn test_extra_qemu_args() {
+        let (mut vm, _state_dir) = get_vm_no_disk();
+
+        // Empty by default
+        assert!(vm.extra_qemu_args().is_empty());
+
+        // Flattens nested single-element lists from Buck2's attrs.arg()
+        vm.machine.extra_qemu_args = vec![
+            vec!["-device".to_string()],
+            vec!["vfio-pci,host=01:00.0".to_string()],
+            vec!["-netdev".to_string()],
+            vec!["tap,id=net0".to_string()],
+        ];
+        assert_eq!(
+            vm.extra_qemu_args(),
+            vec![
+                OsString::from("-device"),
+                OsString::from("vfio-pci,host=01:00.0"),
+                OsString::from("-netdev"),
+                OsString::from("tap,id=net0"),
+            ]
+        );
     }
 
     #[test]
