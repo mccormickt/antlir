@@ -101,7 +101,7 @@ fn eval_and_freeze_module(
 slotmap::new_key_type! {
     /// TypeId and TypeRegistry exist to store unique references to complex types.
     /// These are types that end up getting codegenned, not primitives.
-    #[derive(ProvidesStaticType, NoSerialize, Allocative)]
+    #[derive(ProvidesStaticType, Allocative)]
     #[allocative(skip)]
     struct TypeId;
 }
