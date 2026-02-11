@@ -44,6 +44,7 @@ impl Validator {
             Self::Any(v) => v.iter().any(|v| v.satisfies(item)),
             Self::FileType(f) => match item {
                 Item::Path(Path::Entry(e)) => e.file_type == *f,
+                Item::Path(Path::Mount(m)) => m.file_type == *f,
                 _ => false,
             },
             Self::Executable => match item {

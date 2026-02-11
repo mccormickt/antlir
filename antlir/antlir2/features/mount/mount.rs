@@ -74,7 +74,10 @@ impl antlir2_depgraph_if::RequiresProvides for Mount {
     fn provides(&self) -> Result<Vec<Item>, String> {
         Ok(vec![Item::Path(Path::Mount(item::Mount {
             path: self.mountpoint().clone(),
-            file_type: FileType::Directory,
+            file_type: match self.is_directory() {
+                true => FileType::Directory,
+                false => FileType::File,
+            },
             mode: self.mode(),
             source_description: format!("{self:#?}"),
         }))])
