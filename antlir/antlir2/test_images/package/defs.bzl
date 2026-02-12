@@ -136,11 +136,37 @@ def standard_features(
             link = paths.join(prefix, "hardlink/aloha"),
             target = paths.join(prefix, "hardlink/hello"),
         ),
+        feature.install_text(
+            dst = paths.join(prefix, "setuid-file"),
+            mode = 0o4755,
+            text = "#!/bin/bash\necho setuid",
+        ),
+        feature.install_text(
+            dst = paths.join(prefix, "setgid-file"),
+            mode = 0o2755,
+            text = "#!/bin/bash\necho setgid",
+        ),
+        feature.ensure_subdirs_exist(
+            into_dir = prefix,
+            subdirs_to_create = "sticky-dir",
+            mode = 0o1755,
+        ),
         feature.ensure_subdirs_exist(
             into_dir = prefix,
             subdirs_to_create = "dir-with-xattrs",
             xattrs = {
                 "user.dir_attr": "dir_value",
             },
+        ),
+        # Create two files that are identical in every way except for the name,
+        # and ensure that they don't get turned into hardlinks
+        feature.ensure_dirs_exist(dirs = paths.join(prefix, "identical")),
+        feature.install_text(
+            dst = paths.join(prefix, "identical/file-1"),
+            text = "identical file",
+        ),
+        feature.install_text(
+            dst = paths.join(prefix, "identical/file-2"),
+            text = "identical file",
         ),
     ]

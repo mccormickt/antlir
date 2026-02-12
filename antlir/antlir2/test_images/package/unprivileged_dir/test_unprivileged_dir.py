@@ -55,24 +55,36 @@ class TestUnprivilegedDir(TestCase):
                 stats[str(item.relative_to(root))] = stat_info
 
         # 1) all file/dir names we expect do exist
-        self.assertEqual({"hardlink", "default-dir", ".meta", "dir-with-xattrs"}, dirs)
         self.assertEqual(
             {
-                "only-readable-by-root",
-                "default-dir/relative-file-symlink",
-                "absolute-dir-symlink",
+                ".meta",
+                "default-dir",
+                "dir-with-xattrs",
+                "hardlink",
+                "identical",
+                "sticky-dir",
+            },
+            dirs,
+        )
+        self.assertEqual(
+            {
                 ".meta/target",
-                "i-have-xattrs",
-                "i-have-caps",
-                "i-am-owned-by-nonstandard",
+                "absolute-dir-symlink",
                 "absolute-file-symlink",
                 "antlir2-large-file-256M",
-                "hardlink/hello",
                 "default-dir/executable",
+                "default-dir/relative-file-symlink",
                 "hardlink/aloha",
+                "hardlink/hello",
+                "i-am-owned-by-nonstandard",
+                "i-have-caps",
+                "i-have-xattrs",
+                "identical/file-1",
+                "identical/file-2",
+                "only-readable-by-root",
                 "relative-dir-symlink",
-                "setuid-file",
                 "setgid-file",
+                "setuid-file",
             },
             files,
         )

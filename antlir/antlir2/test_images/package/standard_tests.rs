@@ -231,6 +231,41 @@ fn hardlink() {
     assert_eq!(hello.ino(), aloha.ino());
 }
 
+#[test]
+fn identical_files_not_hardlinks() {
+    let package = StubImpl::open();
+    let identical = package
+        .open_dir("identical")
+        .expect("failed to open /identical dir");
+    let meta1 = identical.metadata("file-1").expect("failed to stat file-1");
+    let meta2 = identical.metadata("file-2").expect("failed to stat file-2");
+    assert_eq!(meta1.nlink(), 1);
+    assert_eq!(meta2.nlink(), 1);
+    assert_ne!(meta1.ino(), meta2.ino());
+}
+
+#[test]
+fn setuid() {
+    let package = StubImpl::open();
+    let meta = package.metadata("setuid-file").expect("failed to stat");
+    assert_eq!(meta.mode() & 0o7777, 0o4755);
+}
+
+#[test]
+fn setgid() {
+    let package = StubImpl::open();
+    let meta = package.metadata("setgid-file").expect("failed to stat");
+    assert_eq!(meta.mode() & 0o7777, 0o2755);
+}
+
+#[test]
+fn sticky_directory() {
+    let package = StubImpl::open();
+    let meta = package.metadata("sticky-dir").expect("failed to stat");
+    assert!(meta.file_type().is_dir());
+    assert_eq!(meta.mode() & 0o7777, 0o1755);
+}
+
 #[cfg(feature = "dot_meta")]
 #[test]
 fn dot_meta() {
@@ -290,8 +325,14 @@ fn no_unexpected_files() {
         "i-am-owned-by-nonstandard",
         "i-have-caps",
         "i-have-xattrs",
+        "identical",
+        "identical/file-1",
+        "identical/file-2",
         "only-readable-by-root",
         "relative-dir-symlink",
+        "setgid-file",
+        "setuid-file",
+        "sticky-dir",
     ]
     .into_iter()
     .map(PathBuf::from)
