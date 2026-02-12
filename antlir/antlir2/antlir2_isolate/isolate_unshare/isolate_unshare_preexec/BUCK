@@ -23,6 +23,7 @@ rust_binary(
         "tokio",
         "tracing",
         "tracing-subscriber",
+        "//antlir/antlir2/antlir2_btrfs:antlir2_btrfs",
         "//antlir/antlir2/antlir2_isolate/isolate_cfg:isolate_cfg",
         "//antlir/antlir2/antlir2_path:antlir2_path",
         "//antlir/util/cli/json_arg:json_arg",

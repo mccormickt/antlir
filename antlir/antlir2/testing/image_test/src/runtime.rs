@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use antlir2_isolate::Ephemeral;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -36,6 +37,9 @@ pub(crate) struct Spec {
     pub(crate) mounts: HashMap<PathBuf, PathBuf>,
     /// Run the test in an unprivileged user namespace
     pub(crate) rootless: bool,
+    /// Run the test in an unprivileged user namespace
+    #[serde(default)]
+    pub(crate) ephemeral: Ephemeral,
 }
 
 #[derive(Debug, Clone, Deserialize)]

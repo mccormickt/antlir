@@ -19,6 +19,30 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_with::serde_as;
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Ephemeral {
+    #[default]
+    Tmpfs,
+    Btrfs,
+}
+
+pub trait IntoEphemeralOption {
+    fn into_ephemeral(self) -> Option<Ephemeral>;
+}
+
+impl IntoEphemeralOption for bool {
+    fn into_ephemeral(self) -> Option<Ephemeral> {
+        if self { Some(Ephemeral::Tmpfs) } else { None }
+    }
+}
+
+impl IntoEphemeralOption for Ephemeral {
+    fn into_ephemeral(self) -> Option<Ephemeral> {
+        Some(self)
+    }
+}
+
 /// Everything needed to know how to isolate an image compilation.
 #[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -45,7 +69,7 @@ pub struct IsolationContext<'a> {
     /// See [IsolationContextBuilder::user]
     pub user: Cow<'a, str>,
     /// See [IsolationContextBuilder::ephemeral]
-    pub ephemeral: bool,
+    pub ephemeral: Option<Ephemeral>,
     /// See [IsolationContextBuilder::tmpfs]
     pub tmpfs: BTreeSet<Cow<'a, Path>>,
     /// See [IsolationContextBuilder::devtmpfs]
@@ -100,7 +124,7 @@ impl<'a> IsolationContext<'a> {
                 invocation_type: InvocationType::Pid2Pipe,
                 register: false,
                 user: Cow::Borrowed("root"),
-                ephemeral: true,
+                ephemeral: Some(Ephemeral::Tmpfs),
                 tmpfs: Default::default(),
                 devtmpfs: Default::default(),
                 tmpfs_overlay: Default::default(),
@@ -179,9 +203,10 @@ impl<'a> IsolationContextBuilder<'a> {
     }
 
     /// Set up the isolated environment to be thrown away after running. When
-    /// false, the root layer will be mutable.
-    pub fn ephemeral(&mut self, ephemeral: bool) -> &mut Self {
-        self.ctx.ephemeral = ephemeral;
+    /// None, the root layer will be mutable. true/Tmpfs uses an overlayfs
+    /// backed by tmpfs. Btrfs creates a writable btrfs snapshot of the layer.
+    pub fn ephemeral<E: IntoEphemeralOption>(&mut self, ephemeral: E) -> &mut Self {
+        self.ctx.ephemeral = ephemeral.into_ephemeral();
         self
     }
 

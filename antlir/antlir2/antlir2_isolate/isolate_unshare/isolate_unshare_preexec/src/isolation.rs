@@ -17,6 +17,7 @@ use anyhow::Context;
 use anyhow::Result;
 use cap_std::fs::Dir;
 use cap_std::fs::OpenOptionsExt as _;
+use isolate_cfg::Ephemeral;
 use isolate_cfg::IsolationContext;
 use nix::mount::MsFlags;
 use nix::mount::mount;
@@ -107,7 +108,7 @@ pub(crate) fn setup_isolation(isol: &IsolationContext) -> Result<()> {
         .open_dir("newroot")
         .context("while opening newroot")?;
 
-    if *ephemeral {
+    if matches!(ephemeral, Some(Ephemeral::Tmpfs)) {
         scratch
             .create_dir("ephemeral_upper")
             .context("mkdir ephemeral_upper")?;

@@ -8,6 +8,7 @@
 use std::ffi::OsString;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::process::CommandExt;
+use std::path::PathBuf;
 
 use anyhow::Context;
 use anyhow::Error;
@@ -23,6 +24,7 @@ use tokio::process::Command;
 use tokio::runtime::Runtime;
 use tokio::signal::unix::SignalKind;
 use tokio::signal::unix::signal;
+use tracing::warn;
 
 use crate::isolation;
 
@@ -33,6 +35,9 @@ pub(crate) struct Pid1Args {
     /// Treat PROGRAM and PROGRAM_ARGS as an init application that should be
     /// 'exec'ed after setting up the antlir container isolation
     exec_init: bool,
+    #[clap(long)]
+    /// Path to a btrfs snapshot directory to delete on exit
+    snapshot_dir: Option<PathBuf>,
     program: OsString,
     #[clap(last = true)]
     program_args: Vec<OsString>,
@@ -51,6 +56,19 @@ async fn pid1_async(args: Pid1Args) -> Result<()> {
     // killed as necessary
     let mut sigchld = signal(SignalKind::child())?;
     let mut sigterm = signal(SignalKind::terminate())?;
+
+    // If a snapshot directory was provided, open it as a btrfs subvolume now
+    // (before chroot) so the parent fd survives chroot.
+    let snapshot_subvol = match &args.snapshot_dir {
+        Some(path) => match antlir2_btrfs::Subvolume::open(path) {
+            Ok(subvol) => Some(subvol),
+            Err(e) => {
+                warn!("failed to open snapshot subvolume for cleanup: {e}");
+                None
+            }
+        },
+        None => None,
+    };
 
     isolation::setup_isolation(args.isolation.as_inner())?;
 
@@ -83,14 +101,14 @@ async fn pid1_async(args: Pid1Args) -> Result<()> {
     let pid2_id = Pid::from_raw(pid2.id().context("while getting pid2 pid")? as i32);
     let pid2_wait = pid2.wait();
     tokio::pin!(pid2_wait);
-    loop {
+    let exit_code = 'outer: loop {
         tokio::select! {
             pid2_status = &mut pid2_wait => {
                 // If our main "tracked" pid2 exits, just exit with the same
                 // status code. The kernel will clean up any processes that
                 // might be left over.
                 let pid2_status = pid2_status.context("while waiting for pid2")?;
-                std::process::exit(pid2_status.code().unwrap_or(254));
+                break 'outer pid2_status.code().unwrap_or(254);
             }
             _ = sigchld.recv() => {
                 // If a process gets reparented to init (this process), then
@@ -100,12 +118,12 @@ async fn pid1_async(args: Pid1Args) -> Result<()> {
                     match waitpid(Pid::from_raw(-1), None) {
                         Ok(WaitStatus::Exited(pid, code)) => {
                             if pid == pid2_id {
-                                std::process::exit(code)
+                                break 'outer code;
                             }
                         }
                         Ok(WaitStatus::Signaled(pid, sig, _)) => {
                             if pid == pid2_id {
-                                std::process::exit(128 + sig as i32)
+                                break 'outer 128 + sig as i32;
                             }
                         }
                         Err(nix::Error::ECHILD) => {
@@ -119,8 +137,17 @@ async fn pid1_async(args: Pid1Args) -> Result<()> {
             _ = sigterm.recv() => {
                 // If we get SIGTERM, then just exit and the kernel will
                 // forcibly kill any processes left over
-                std::process::exit(0);
+                break 'outer 0;
             }
         }
+    };
+
+    // Try to delete the btrfs snapshot before exiting
+    if let Some(subvol) = snapshot_subvol {
+        if let Err((_, e)) = subvol.delete() {
+            warn!("failed to delete btrfs snapshot in pid1: {e}");
+        }
     }
+
+    std::process::exit(exit_code);
 }

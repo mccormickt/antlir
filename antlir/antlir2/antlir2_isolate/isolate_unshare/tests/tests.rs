@@ -8,7 +8,10 @@
 #![feature(io_error_more)]
 
 use std::path::Path;
+use std::thread;
+use std::time::Duration;
 
+use antlir2_isolate::Ephemeral;
 use antlir2_isolate::IsolationContext;
 use antlir2_isolate::unshare;
 use nix::mount::MsFlags;
@@ -183,4 +186,120 @@ fn loopback_interface() {
         "antlir2",
     );
     std::net::TcpListener::bind("[::1]:0").expect("failed to bind to socket");
+}
+
+/// Find any ephemeral snapshots for the given layer path, returning their names.
+fn find_ephemeral_snapshots(layer: &Path) -> Vec<String> {
+    let layer = layer
+        .canonicalize()
+        .expect("failed to canonicalize layer path");
+    let parent = layer.parent().expect("layer has no parent");
+    let layer_name = layer.file_name().expect("layer has no name");
+    let prefix = format!(".{}.", layer_name.to_string_lossy());
+    let mut found = Vec::new();
+    for entry in std::fs::read_dir(parent).expect("failed to read parent dir") {
+        let entry = entry.expect("failed to read dir entry");
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy().to_string();
+        if name_str.starts_with(&prefix) {
+            found.push(name_str);
+        }
+    }
+    found
+}
+
+/// Assert that no ephemeral btrfs snapshots were left behind for the given
+/// layer path.
+fn assert_no_ephemeral_snapshots(layer: &Path) {
+    let ephemerals = find_ephemeral_snapshots(layer);
+    assert!(
+        ephemerals.is_empty(),
+        "found ephemeral snapshots that should not be left behind: {:#?}",
+        ephemerals
+    );
+}
+
+/// Ephemeral::Btrfs creates a writable btrfs snapshot and cleans it up after
+/// the inner process exits successfully.
+#[test]
+fn btrfs_ephemeral_cleanup_on_success() {
+    let layer = Path::new("/nested/dir/for/symlink/isolated_symlink");
+    let isol = IsolationContext::builder(layer)
+        .ephemeral(Ephemeral::Btrfs)
+        .working_directory(Path::new("/"))
+        .build();
+    let out = unshare(isol)
+        .expect("failed to prepare unshare")
+        .command("bash")
+        .expect("failed to create command")
+        .arg("-c")
+        .arg("touch /ephemeral_test_file && cat /foo")
+        .output()
+        .expect("failed to run command");
+    assert_cmd_success(&out);
+    assert_eq!(out.stdout, b"foo\n");
+    assert_no_ephemeral_snapshots(layer);
+    assert!(
+        !layer.join("ephemeral_test_file").exists(),
+        "write inside ephemeral container should not persist to original layer"
+    );
+}
+
+/// Ephemeral::Btrfs cleans up the snapshot even when the inner process fails.
+#[test]
+fn btrfs_ephemeral_cleanup_on_failure() {
+    let layer = Path::new("/nested/dir/for/symlink/isolated_symlink");
+    let isol = IsolationContext::builder(layer)
+        .ephemeral(Ephemeral::Btrfs)
+        .working_directory(Path::new("/"))
+        .build();
+    let out = unshare(isol)
+        .expect("failed to prepare unshare")
+        .command("bash")
+        .expect("failed to create command")
+        .arg("-c")
+        .arg("touch /ephemeral_test_file && exit 42")
+        .output()
+        .expect("failed to run command");
+    assert_cmd_fail(&out);
+    assert_eq!(out.status.code().expect("no exit code"), 42);
+    assert_no_ephemeral_snapshots(layer);
+    assert!(
+        !layer.join("ephemeral_test_file").exists(),
+        "write inside ephemeral container should not persist to original layer"
+    );
+}
+
+/// Verify that the ephemeral subvolume is actually visible while a long-running
+/// command is executing. This gives us confidence that assert_no_ephemeral_snapshots
+/// is looking at the right path and that cleanup assertions are meaningful.
+#[test]
+fn btrfs_ephemeral_exists_during_execution() {
+    let layer = Path::new("/nested/dir/for/symlink/isolated_symlink");
+    let isol = IsolationContext::builder(layer)
+        .ephemeral(Ephemeral::Btrfs)
+        .working_directory(Path::new("/"))
+        .build();
+    let mut child = unshare(isol)
+        .expect("failed to prepare unshare")
+        .command("sleep")
+        .expect("failed to create command")
+        .arg("5")
+        .spawn()
+        .expect("failed to spawn command");
+
+    // Give the preexec binary time to create the btrfs snapshot
+    thread::sleep(Duration::from_secs(2));
+
+    let snapshots = find_ephemeral_snapshots(layer);
+    assert!(
+        !snapshots.is_empty(),
+        "expected to find an ephemeral snapshot while the command is running, but found none"
+    );
+
+    let status = child.wait().expect("failed to wait for child");
+    assert!(status.success(), "sleep command failed: {}", status);
+
+    // After the command exits, the snapshot should be cleaned up
+    assert_no_ephemeral_snapshots(layer);
 }

@@ -9,8 +9,10 @@ use std::collections::HashSet;
 use std::ffi::OsString;
 use std::path::PathBuf;
 
+use antlir2_isolate::Ephemeral;
 use antlir2_isolate::IsolationContext;
 use antlir2_isolate::nspawn;
+use antlir2_isolate::unshare;
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::ensure;
@@ -27,9 +29,13 @@ struct Args {
     outputs: Vec<PathBuf>,
     #[clap(long = "create-output-file")]
     create_output_files: Vec<PathBuf>,
-    #[clap(long)]
+    #[clap(long, conflicts_with = "ephemeral_btrfs")]
     /// Use layer as readonly root, don't make an ephemeral snapshot
     readonly: bool,
+    #[clap(long, conflicts_with = "readonly")]
+    ephemeral_btrfs: bool,
+    #[clap(long)]
+    rootless: bool,
     program: OsString,
     args: Vec<OsString>,
 }
@@ -51,20 +57,35 @@ fn main() -> Result<()> {
     antlir2_rootless::init().context("while setting up antlir2_rootless")?;
 
     let args = Args::parse();
+
+    if args.rootless {
+        antlir2_rootless::unshare_new_userns().context("while unsharing userns")?;
+    }
+
     for path in &args.create_output_files {
         std::fs::File::create(path)
             .with_context(|| format!("while creating '{}'", path.display()))?;
     }
     let cwd = std::env::current_dir().context("while getting cwd")?;
-    let ctx = IsolationContext::builder(args.layer)
-        .ephemeral(!args.readonly)
-        .inputs(args.inputs.into_iter().collect::<HashSet<_>>())
+    let mut ctx = IsolationContext::builder(args.layer);
+    ctx.inputs(args.inputs.into_iter().collect::<HashSet<_>>())
         .outputs(args.outputs.into_iter().collect::<HashSet<_>>())
         .outputs(args.create_output_files.into_iter().collect::<HashSet<_>>())
         .outputs(cwd.clone())
-        .working_directory(cwd)
-        .build();
-    let ctx = nspawn(ctx).context("while isolating")?;
+        .working_directory(cwd);
+    if args.readonly {
+        ctx.ephemeral(false);
+    } else if args.ephemeral_btrfs {
+        ctx.ephemeral(Ephemeral::Btrfs);
+    } else {
+        ctx.ephemeral(true);
+    }
+    let ctx = ctx.build();
+    let ctx = if args.rootless {
+        unshare(ctx).context("while isolating")?
+    } else {
+        nspawn(ctx).context("while isolating")?
+    };
     let res = ctx.command(args.program)?.args(args.args).spawn()?.wait()?;
     ensure!(res.success(), "isolated command failed");
     Ok(())

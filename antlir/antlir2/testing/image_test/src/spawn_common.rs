@@ -100,7 +100,8 @@ pub(crate) fn run(
         (false, true) => InvocationType::Pid2Interactive,
     })
     .inputs(spec.mounts)
-    .setenv(("ANTLIR2_IMAGE_TEST", "1"));
+    .setenv(("ANTLIR2_IMAGE_TEST", "1"))
+    .ephemeral(spec.ephemeral);
 
     // XARs need /dev/fuse to run. Ideally we could just have this created
     // inside the container. Until

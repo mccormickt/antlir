@@ -31,6 +31,7 @@ image.layer(
         feature.rpms_install(rpms = [
             "coreutils",
             "bash",
+            "/usr/bin/mount",
         ]),
         feature.install_text(
             dst = "/foo",
@@ -56,6 +57,11 @@ image.layer(
             mountpoint = "/isolated",
             source = ":isolated-root",
         ),
+        feature.ensure_dirs_exist(dirs = "/nested/dir/for/symlink"),
+        feature.ensure_dir_symlink(
+            link = "/nested/dir/for/symlink/isolated_symlink",
+            target = "/isolated",
+        ),
         feature.install_text(
             dst = "/bar",
             text = "bar\n",
@@ -71,6 +77,7 @@ image_rust_test(
     name = "tests",
     srcs = glob(["tests/**/*.rs"]),
     crate_root = "tests/tests.rs",
+    ephemeral = "btrfs",
     # This test does not work under architecture emulation. Mark it as such in
     # buck-land, and also disable scheduling CI for aarch64
     exec_compatible_with = select({

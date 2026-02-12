@@ -25,6 +25,7 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+pub use isolate_cfg::Ephemeral;
 pub use isolate_cfg::InvocationType;
 pub use isolate_cfg::IsolationContext;
 pub use isolate_unshare::mount::unshare_and_privatize_mount_ns;

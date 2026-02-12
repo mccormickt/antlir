@@ -140,7 +140,7 @@ pub fn nspawn(ctx: IsolationContext) -> Result<IsolatedContext> {
     // Explicitly do not look for any settings for our ephemeral machine
     // on the host.
     nspawn_args.push("--settings=no".into());
-    if ephemeral {
+    if ephemeral.is_some() {
         nspawn_args.push("--ephemeral".into());
         // run as many ephemeral containers as we want
         env.insert("SYSTEMD_NSPAWN_LOCK".into(), "0".into());
