@@ -56,6 +56,10 @@ impl Default for Entry {
     fn default() -> Self {
         let mut header = Header::new_ustar();
         header.set_mtime(FIXED_MTIME);
+        // Ensure size field has valid octal encoding ("0") rather than all-NUL
+        // bytes. Without this, strict tar parsers (ostree) reject symlink,
+        // hardlink, and directory entries whose size field is unparseable.
+        header.set_size(0);
         Self {
             header,
             contents: Contents::Unset,
@@ -392,6 +396,7 @@ fn main() -> Result<()> {
             use std::os::unix::fs::MetadataExt;
             let mut header = Header::new_ustar();
             header.set_mtime(FIXED_MTIME);
+            header.set_size(0);
             header.set_mode(meta.mode());
             header.set_uid(meta.uid() as u64);
             header.set_gid(meta.gid() as u64);
@@ -420,6 +425,7 @@ fn main() -> Result<()> {
         let wh_full_path = wh_path.parent().unwrap_or(Path::new("")).join(wh_name);
         let mut header = Header::new_ustar();
         header.set_mtime(FIXED_MTIME);
+        header.set_size(0);
         header.set_mode(0o644);
         header.set_entry_type(EntryType::Regular);
         builder.append_data(&mut header, wh_full_path, std::io::empty())?;
