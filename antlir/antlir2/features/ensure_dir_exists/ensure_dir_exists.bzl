@@ -20,7 +20,8 @@ def ensure_subdirs_exist(
         subdirs_to_create: str | Select,
         mode: int | str | Select = 0o755,
         user: str | Select = "root",
-        group: str | Select = "root"):
+        group: str | Select = "root",
+        xattrs: dict[str, str] | Select = {}):
     """
     Ensure directories exist in the image (analogous to `mkdir -p`).
 
@@ -35,6 +36,7 @@ def ensure_subdirs_exist(
         mode: set file mode bits of the newly-created directories
         user: set owning user of the newly-created directories
         group: set owning group of the newly-created directories
+        xattrs: extended attributes to set on the leaf directory
     """
     return ParseTimeFeature(
         feature_type = "ensure_dir_exists",
@@ -45,6 +47,7 @@ def ensure_subdirs_exist(
             "mode": mode,
             "subdirs_to_create": subdirs_to_create,
             "user": user,
+            "xattrs": xattrs,
         },
     )
 
@@ -67,10 +70,10 @@ def _impl(ctx: AnalysisContext) -> list[Provider]:
     mode = stat.mode(ctx.attrs.mode) if ctx.attrs.mode else None
     features = []
     dir = ctx.attrs.into_dir
-    for component in ctx.attrs.subdirs_to_create.split("/"):
-        if not component:
-            continue
+    components = [c for c in ctx.attrs.subdirs_to_create.split("/") if c]
+    for i, component in enumerate(components):
         dir = paths.join(dir, component)
+        is_leaf = (i == len(components) - 1)
 
         features.append(FeatureAnalysis(
             feature_type = "ensure_dir_exists",
@@ -79,6 +82,7 @@ def _impl(ctx: AnalysisContext) -> list[Provider]:
                 mode = mode,
                 user = ctx.attrs.user,
                 group = ctx.attrs.group,
+                xattrs = ctx.attrs.xattrs if is_leaf else {},
             ),
             plugin = ctx.attrs.plugin,
             build_phase = BuildPhase(ctx.attrs.build_phase),
@@ -99,5 +103,6 @@ ensure_dir_exists_rule = new_feature_rule(
         "mode": attrs.one_of(attrs.string(), attrs.int()),
         "subdirs_to_create": attrs.string(),
         "user": attrs.string(),
+        "xattrs": attrs.dict(attrs.string(), attrs.string(), default = {}),
     },
 )

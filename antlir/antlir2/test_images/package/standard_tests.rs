@@ -87,6 +87,41 @@ fn xattrs() {
 
 #[cfg(feature = "xattr")]
 #[test]
+fn dir_xattrs() {
+    let package = StubImpl::open();
+    // cap_std::fs::Dir opens with O_PATH which doesn't support xattr
+    // operations, so use openat to get a real O_RDONLY fd for the directory.
+    let fd = nix::fcntl::openat(
+        &package,
+        "dir-with-xattrs",
+        nix::fcntl::OFlag::O_RDONLY | nix::fcntl::OFlag::O_DIRECTORY,
+        nix::sys::stat::Mode::empty(),
+    )
+    .expect("failed to openat dir");
+    let dir_file = std::fs::File::from(fd);
+    let xattrs: std::collections::BTreeMap<std::ffi::OsString, Vec<u8>> = dir_file
+        .list_xattr()
+        .expect("failed to list xattrs")
+        .map(|k| {
+            (
+                k.clone(),
+                dir_file
+                    .get_xattr(&k)
+                    .expect("failed to read xattr value")
+                    .expect("xattr missing"),
+            )
+        })
+        .collect();
+    assert_eq!(
+        xattrs,
+        btreemap! {
+            "user.dir_attr".into() => b"dir_value".to_vec(),
+        }
+    );
+}
+
+#[cfg(feature = "xattr")]
+#[test]
 fn capabilities() {
     // this is basicaly the same as xattrs, but ensures that the
     // security.capability xattr is packaged correctly
@@ -248,6 +283,7 @@ fn no_unexpected_files() {
         "default-dir",
         "default-dir/executable",
         "default-dir/relative-file-symlink",
+        "dir-with-xattrs",
         "hardlink",
         "hardlink/aloha",
         "hardlink/hello",

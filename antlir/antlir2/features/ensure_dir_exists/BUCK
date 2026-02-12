@@ -4,4 +4,7 @@ oncall("antlir")
 
 feature_impl(
     name = "ensure_dir_exists",
+    deps = [
+        "xattr",
+    ],
 )

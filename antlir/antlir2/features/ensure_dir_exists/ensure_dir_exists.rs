@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+use std::collections::BTreeMap;
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::fs::chown;
@@ -32,6 +33,8 @@ pub struct EnsureDirExists {
     pub dir: PathInLayer,
     pub mode: Mode,
     pub user: UserName,
+    #[serde(default)]
+    pub xattrs: BTreeMap<String, String>,
 }
 
 impl antlir2_depgraph_if::RequiresProvides for EnsureDirExists {
@@ -69,6 +72,9 @@ impl antlir2_compile::CompileFeature for EnsureDirExists {
                 let gid = ctx.gid(&self.group)?;
                 chown(&dst, Some(uid.into()), Some(gid.into()))?;
                 std::fs::set_permissions(&dst, Permissions::from_mode(self.mode.0))?;
+                for (key, val) in &self.xattrs {
+                    xattr::set(&dst, key, val.as_bytes())?;
+                }
             }
             Err(e) => match e.kind() {
                 // The directory may have already been created by a concurrent [EnsureDirsExist]
@@ -76,6 +82,9 @@ impl antlir2_compile::CompileFeature for EnsureDirExists {
                 // have validated that the ownership and modes are identical
                 std::io::ErrorKind::AlreadyExists => {
                     tracing::debug!(dst = dst.display().to_string(), "dir already existed");
+                    for (key, val) in &self.xattrs {
+                        xattr::set(&dst, key, val.as_bytes())?;
+                    }
                 }
                 _ => return Err(e.into()),
             },

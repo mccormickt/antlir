@@ -1,0 +1,12 @@
+[file."parent/xattr-dir"]
+op = 'diff'
+
+[file."parent/xattr-dir".diff]
+
+[file."parent/xattr-dir".diff.xattrs]
+
+[file."parent/xattr-dir".diff.xattrs.added]
+"user.qux" = "qux"
+
+[file."parent/xattr-dir".diff.xattrs.changed]
+"user.foo" = "baz"

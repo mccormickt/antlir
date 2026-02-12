@@ -24,8 +24,52 @@ image.layer(
 )
 
 image_diff_test(
-    name = "ensure-dirs_exist-test",
+    name = "ensure_dirs_exist-test",
     diff = "ensure_dirs_exist.toml",
     diff_type = "file",
     layer = ":ensure_dirs_exist",
+)
+
+image.layer(
+    name = "xattrs",
+    features = [
+        feature.ensure_subdirs_exist(
+            into_dir = "/",
+            subdirs_to_create = "parent/xattr-dir",
+            xattrs = {
+                "user.bar": "bar",
+                "user.foo": "foo",
+            },
+        ),
+    ],
+    parent_layer = ":base",
+)
+
+image_diff_test(
+    name = "ensure_dirs_exist-xattrs-test",
+    diff = "ensure_dirs_exist_xattrs.toml",
+    diff_type = "file",
+    layer = ":xattrs",
+)
+
+image.layer(
+    name = "xattrs-update-existing",
+    features = [
+        feature.ensure_subdirs_exist(
+            into_dir = "/",
+            subdirs_to_create = "parent/xattr-dir",
+            xattrs = {
+                "user.foo": "baz",
+                "user.qux": "qux",
+            },
+        ),
+    ],
+    parent_layer = ":xattrs",
+)
+
+image_diff_test(
+    name = "xattrs-update-existing-test",
+    diff = "ensure_dirs_exist_xattrs_update_existing.toml",
+    diff_type = "file",
+    layer = ":xattrs-update-existing",
 )

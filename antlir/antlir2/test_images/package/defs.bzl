@@ -136,4 +136,11 @@ def standard_features(
             link = paths.join(prefix, "hardlink/aloha"),
             target = paths.join(prefix, "hardlink/hello"),
         ),
+        feature.ensure_subdirs_exist(
+            into_dir = prefix,
+            subdirs_to_create = "dir-with-xattrs",
+            xattrs = {
+                "user.dir_attr": "dir_value",
+            },
+        ),
     ]

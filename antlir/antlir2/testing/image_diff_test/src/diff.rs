@@ -122,10 +122,12 @@ impl FileEntryDiff {
             content_hash: if text.is_some() {
                 None
             } else {
-                FieldDiff::new(
-                    content_hash.clone().expect("set if text is None"),
-                    child.content_hash.clone().expect("set if text is None"),
-                )
+                match (content_hash, &child.content_hash) {
+                    (Some(parent_hash), Some(child_hash)) => {
+                        FieldDiff::new(parent_hash.clone(), child_hash.clone())
+                    }
+                    _ => None,
+                }
             },
             xattrs: XattrDiff::new(xattrs, &child.xattrs),
             text_patch: text,
@@ -135,8 +137,11 @@ impl FileEntryDiff {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 struct XattrDiff {
+    #[serde(default)]
     removed: BTreeSet<String>,
+    #[serde(default)]
     added: BTreeMap<String, XattrData>,
+    #[serde(default)]
     changed: BTreeMap<String, XattrData>,
 }
 

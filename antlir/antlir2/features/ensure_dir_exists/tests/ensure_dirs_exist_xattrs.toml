@@ -1,0 +1,22 @@
+[file.parent]
+op = "added"
+
+[file.parent.diff]
+mode = "u+rwx,g+rx,o+rx"
+file-type = "directory"
+user = "root"
+group = "root"
+
+[file."parent/xattr-dir"]
+op = 'added'
+
+[file."parent/xattr-dir".diff]
+mode = 'u+rwx,g+rx,o+rx'
+file-type = 'directory'
+user = "root"
+group = "root"
+content_hash = "0"
+
+[file."parent/xattr-dir".diff.xattrs]
+"user.bar" = "bar"
+"user.foo" = "foo"
