@@ -92,9 +92,6 @@ def cmd_dwp(args: argparse.Namespace) -> None:
 
 def cmd_metadata(args: argparse.Namespace) -> None:
     """Generate the metadata.json file."""
-    # ensure this exists or buck2 will get mad
-    args.objcopy_tmp.touch()
-
     if not is_elf_binary(args.binary):
         with open(args.metadata, "w") as f:
             json.dump({}, f)
@@ -106,10 +103,12 @@ def cmd_metadata(args: argparse.Namespace) -> None:
     buildid_proc = subprocess.run(
         [
             args.objcopy,
-            "--dump-section",
-            ".note.gnu.build-id=/dev/stdout",
+            "-O",
+            "binary",
+            "--only-section",
+            ".note.gnu.build-id",
             args.binary,
-            args.objcopy_tmp,
+            "/dev/stdout",
         ],
         capture_output=True,
     )
@@ -159,7 +158,6 @@ def main() -> None:
 
     metadata_parser = subparsers.add_parser("metadata", parents=[common_parser])
     metadata_parser.add_argument("--metadata", required=True, type=Path)
-    metadata_parser.add_argument("--objcopy-tmp", required=True, type=Path)
     metadata_parser.set_defaults(func=cmd_metadata)
 
     args = parser.parse_args()

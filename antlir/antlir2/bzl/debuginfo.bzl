@@ -28,11 +28,6 @@ def _split_binary_impl(ctx: AnalysisContext) -> list[Provider]:
     dwp_out = ctx.actions.declare_output("dwp")
     metadata = ctx.actions.declare_output("metadata.json")
 
-    # objcopy needs a temporary file that it can write to. use a buck2 output
-    # artifact so that it doesn't try to put it somewhere it doesn't have access
-    # to write
-    objcopy_tmp = ctx.actions.declare_output("objcopy_tmp")
-
     # Common args for all subcommands
     common_args = cmd_args(
         cmd_args(objcopy, format = "--objcopy={}"),
@@ -80,7 +75,6 @@ def _split_binary_impl(ctx: AnalysisContext) -> list[Provider]:
             "metadata",
             common_args,
             cmd_args(metadata.as_output(), format = "--metadata={}"),
-            cmd_args(objcopy_tmp.as_output(), format = "--objcopy-tmp={}"),
         ),
         category = "split",
         identifier = "metadata",
