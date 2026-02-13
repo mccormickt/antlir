@@ -33,19 +33,57 @@ def _split_binary_impl(ctx: AnalysisContext) -> list[Provider]:
     # to write
     objcopy_tmp = ctx.actions.declare_output("objcopy_tmp")
 
+    # Common args for all subcommands
+    common_args = cmd_args(
+        cmd_args(objcopy, format = "--objcopy={}"),
+        cmd_args(src, format = "--binary={}"),
+    )
+
+    # Run separate concurrent actions for each output
     ctx.actions.run(
         cmd_args(
             ctx.attrs.debuginfo_splitter[RunInfo],
-            cmd_args(objcopy, format = "--objcopy={}"),
-            cmd_args(src, format = "--binary={}"),
-            (cmd_args(src_dwp, format = "--binary-dwp={}") if src_dwp else []),
+            "strip",
+            common_args,
             cmd_args(stripped.as_output(), format = "--stripped={}"),
+        ),
+        category = "split",
+        identifier = "stripped",
+    )
+
+    ctx.actions.run(
+        cmd_args(
+            ctx.attrs.debuginfo_splitter[RunInfo],
+            "debuginfo",
+            common_args,
             cmd_args(debuginfo.as_output(), format = "--debuginfo={}"),
-            cmd_args(metadata.as_output(), format = "--metadata={}"),
+        ),
+        category = "split",
+        identifier = "debuginfo",
+    )
+
+    ctx.actions.run(
+        cmd_args(
+            ctx.attrs.debuginfo_splitter[RunInfo],
+            "dwp",
+            common_args,
+            (cmd_args(src_dwp, format = "--binary-dwp={}") if src_dwp else []),
             cmd_args(dwp_out.as_output(), format = "--dwp={}"),
+        ),
+        category = "split",
+        identifier = "dwp",
+    )
+
+    ctx.actions.run(
+        cmd_args(
+            ctx.attrs.debuginfo_splitter[RunInfo],
+            "metadata",
+            common_args,
+            cmd_args(metadata.as_output(), format = "--metadata={}"),
             cmd_args(objcopy_tmp.as_output(), format = "--objcopy-tmp={}"),
         ),
         category = "split",
+        identifier = "metadata",
     )
 
     return [
