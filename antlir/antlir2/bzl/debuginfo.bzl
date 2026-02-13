@@ -25,8 +25,10 @@ def _split_binary_impl(ctx: AnalysisContext) -> list[Provider]:
 
     stripped = ctx.actions.declare_output("stripped")
     debuginfo = ctx.actions.declare_output("debuginfo")
-    dwp_out = ctx.actions.declare_output("dwp")
     metadata = ctx.actions.declare_output("metadata.json")
+
+    # TODO(vmagro): Get rid of the empty file fallback
+    dwp_out = src_dwp or ctx.actions.write("dwp", "")
 
     # Common args for all subcommands
     common_args = cmd_args(
@@ -55,18 +57,6 @@ def _split_binary_impl(ctx: AnalysisContext) -> list[Provider]:
         ),
         category = "split",
         identifier = "debuginfo",
-    )
-
-    ctx.actions.run(
-        cmd_args(
-            ctx.attrs.debuginfo_splitter[RunInfo],
-            "dwp",
-            common_args,
-            (cmd_args(src_dwp, format = "--binary-dwp={}") if src_dwp else []),
-            cmd_args(dwp_out.as_output(), format = "--dwp={}"),
-        ),
-        category = "split",
-        identifier = "dwp",
     )
 
     ctx.actions.run(

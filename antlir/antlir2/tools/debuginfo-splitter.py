@@ -81,15 +81,6 @@ def cmd_debuginfo(args: argparse.Namespace) -> None:
         )
 
 
-def cmd_dwp(args: argparse.Namespace) -> None:
-    """Generate the dwp output file."""
-    if args.binary_dwp:
-        shutil.copy2(args.binary_dwp, args.dwp)
-    else:
-        with open(args.dwp, "w"):
-            pass
-
-
 def cmd_metadata(args: argparse.Namespace) -> None:
     """Generate the metadata.json file."""
     if not is_elf_binary(args.binary):
@@ -150,11 +141,6 @@ def main() -> None:
     debuginfo_parser = subparsers.add_parser("debuginfo", parents=[common_parser])
     debuginfo_parser.add_argument("--debuginfo", required=True, type=Path)
     debuginfo_parser.set_defaults(func=cmd_debuginfo)
-
-    dwp_parser = subparsers.add_parser("dwp", parents=[common_parser])
-    dwp_parser.add_argument("--binary-dwp", type=Path)
-    dwp_parser.add_argument("--dwp", required=True, type=Path)
-    dwp_parser.set_defaults(func=cmd_dwp)
 
     metadata_parser = subparsers.add_parser("metadata", parents=[common_parser])
     metadata_parser.add_argument("--metadata", required=True, type=Path)
