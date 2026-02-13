@@ -18,8 +18,17 @@ use libc::AT_RECURSIVE;
 use libc::AT_SYMLINK_NOFOLLOW;
 use libc::c_char;
 use libc::c_uint;
+use rustix::fs::CWD;
+use rustix::mount::FsMountFlags;
+use rustix::mount::FsOpenFlags;
 use rustix::mount::MountAttrFlags;
+use rustix::mount::MoveMountFlags;
+use rustix::mount::fsconfig_create;
+use rustix::mount::fsmount;
+use rustix::mount::fsopen;
+use rustix::mount::move_mount;
 
+// mount_setattr is not yet implemented in rustix, so we keep the raw syscall.
 #[repr(C)]
 #[allow(non_camel_case_types)]
 struct mount_attr {
@@ -68,4 +77,52 @@ pub(crate) fn make_mount_readonly(path: &Path) -> Result<()> {
         )
     }
     .context("while making mount readonly")
+}
+
+/// Mount a new proc filesystem at `target` using the new mount API
+/// (fsopen/fsconfig/fsmount/move_mount).
+///
+/// If `readonly` is true, the mount is created with MOUNT_ATTR_RDONLY. This is
+/// needed as a fallback in non-init user namespaces where the kernel's
+/// `mount_too_revealing()` check (fs/namespace.c) blocks read-write proc
+/// mounts. The check calls `mnt_already_visible()` which iterates all existing
+/// proc-type mounts and requires at least one to be "fully visible" (no
+/// MNT_LOCKED children on non-empty directories, and compatible flags).
+///
+/// On systemd-nspawn hosts, the container's /proc has locked masking mounts
+/// (on /proc/kmsg, /proc/sys/kernel/random/boot_id, etc.) making it "not fully
+/// visible". However, /run/host/proc is mounted by Sandcastle
+/// (https://fburl.com/code/3pkk22bj) as a read-only view of the parent
+/// process's procfs for exactly this usage within antlir. Since /run/host/proc
+/// has MNT_LOCK_READONLY, `mnt_already_visible()` only matches it for mounts
+/// that also request MNT_READONLY. Mounting proc readonly allows this match,
+/// producing a fresh proc for the correct PID namespace.
+pub(crate) fn mount_proc(target: &Path, readonly: bool) -> Result<()> {
+    // 1. fsopen("proc", FSOPEN_CLOEXEC) — create a filesystem context for proc
+    let fs_fd = fsopen("proc", FsOpenFlags::FSOPEN_CLOEXEC).context("fsopen(\"proc\") failed")?;
+
+    // 2. fsconfig_create(fs_fd) — create the superblock
+    fsconfig_create(&fs_fd).context("fsconfig_create failed")?;
+
+    // 3. fsmount(fs_fd, FSMOUNT_CLOEXEC, attr_flags) — create a detached mount
+    let mut attr_flags = MountAttrFlags::MOUNT_ATTR_NOSUID
+        | MountAttrFlags::MOUNT_ATTR_NODEV
+        | MountAttrFlags::MOUNT_ATTR_NOEXEC;
+    if readonly {
+        attr_flags |= MountAttrFlags::MOUNT_ATTR_RDONLY;
+    }
+    let mnt_fd =
+        fsmount(&fs_fd, FsMountFlags::FSMOUNT_CLOEXEC, attr_flags).context("fsmount failed")?;
+
+    // 4. move_mount(mnt_fd, "", AT_FDCWD, target, MOVE_MOUNT_F_EMPTY_PATH) — attach it
+    move_mount(
+        &mnt_fd,
+        "",
+        CWD,
+        target,
+        MoveMountFlags::MOVE_MOUNT_F_EMPTY_PATH,
+    )
+    .context("move_mount failed")?;
+
+    Ok(())
 }

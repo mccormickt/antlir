@@ -26,7 +26,6 @@ use nix::sched::unshare;
 use nix::unistd::Gid;
 use nix::unistd::Uid;
 use nix::unistd::User;
-use tracing::warn;
 
 /// MS_NOSYMFOLLOW (since Linux 5.10)
 /// Do not follow symbolic links when resolving paths.  Symbolic links can still
@@ -335,27 +334,30 @@ pub(crate) fn setup_isolation(isol: &IsolationContext) -> Result<()> {
         Err(e) => Err(e),
     }?;
 
-    match nix::mount::mount(
-        None::<&str>,
-        &newroot.open_dir("proc")?.abspath(),
-        Some("proc"),
-        MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC | MsFlags::MS_NODEV,
-        None::<&str>,
-    ) {
-        Ok(()) => Ok(()),
-        Err(nix::errno::Errno::EPERM) => {
-            warn!("got EPERM while mounting /proc - attempting a bind mount instead");
-            mount(
-                Some("/proc"),
-                &newroot.open_dir("proc")?.abspath(),
-                None::<&str>,
-                MsFlags::MS_BIND | MsFlags::MS_REC,
-                None::<&str>,
+    let proc_mountpoint = newroot.open_dir("proc")?.abspath();
+
+    // Mount a fresh proc for our new PID namespace.
+    //
+    // In a non-init user namespace (e.g. inside systemd-nspawn), the kernel's
+    // mount_too_revealing() check (fs/namespace.c) calls mnt_already_visible()
+    // which looks for an existing proc-type mount that is "fully visible" — no
+    // MNT_LOCKED children covering non-empty directories. The container's /proc
+    // has locked masking mounts (on /proc/kmsg, /proc/sys/kernel/random/boot_id)
+    // set by systemd-nspawn, so a read-write proc mount is denied with EPERM.
+    //
+    // Fallback: mount proc read-only. mnt_already_visible() can then match
+    // against /run/host/proc (a read-only parent proc view exposed by
+    // Sandcastle). The resulting proc is for the correct PID namespace but
+    // read-only (MNT_LOCK_READONLY inherited from the match).
+    if let Err(rw_err) = crate::new_mount_api::mount_proc(&proc_mountpoint, false) {
+        crate::new_mount_api::mount_proc(&proc_mountpoint, true).with_context(|| {
+            format!(
+                "while mounting /proc at '{}' (read-only fallback after read-write \
+                 mount failed: {rw_err:#})",
+                proc_mountpoint.display(),
             )
-            .context("while bind-mounting /proc")
-        }
-        Err(e) => Err(e).context("while mounting /proc"),
-    }?;
+        })?;
+    }
 
     nix::unistd::chroot(&newroot.abspath())?;
     if let Some(wd) = working_directory {
