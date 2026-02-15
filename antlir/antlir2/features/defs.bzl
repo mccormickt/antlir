@@ -117,10 +117,12 @@ def feature_impl(
         rustc_flags = [
             # statically link rust's libstd
             "-Cprefer-dynamic=no",
+        ],
+        linker_flags = [
             # Set an RPATH using $ORIGIN so that we can make the feature plugins
             # more or less self-contained.
             # See feature_plugin impl above for more details.
-            "-Clink-arg=-Wl,-rpath=$ORIGIN/lib",
+            "-Wl,-rpath=$ORIGIN/lib",
         ],
         env = {
             "LABEL": normalize_target(":" + name),
