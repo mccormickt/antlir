@@ -278,8 +278,11 @@ CONFIG_PERF_EVENTS=y
 # Kexec and crash features
 #
 CONFIG_VMCORE_INFO=y
-# CONFIG_KEXEC is not set
-# CONFIG_KEXEC_FILE is not set
+CONFIG_KEXEC=y
+CONFIG_KEXEC_FILE=y
+CONFIG_KEXEC_SIG=y
+CONFIG_KEXEC_BZIMAGE_VERIFY_SIG=y
+CONFIG_CRASH_DUMP=y
 # CONFIG_KEXEC_HANDOVER is not set
 # end of Kexec and crash features
 # end of General setup
