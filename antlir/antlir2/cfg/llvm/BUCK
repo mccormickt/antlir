@@ -1,0 +1,11 @@
+load("@prelude//:rules.bzl", "constraint")
+load(":versions.bzl", "ANTLIR_LLVM_VERSIONS", "DEFAULT_LLVM_VERSION")
+
+oncall("antlir")
+
+constraint(
+    name = "llvm-version",
+    default = DEFAULT_LLVM_VERSION,
+    values = ANTLIR_LLVM_VERSIONS,
+    visibility = ["PUBLIC"],
+)

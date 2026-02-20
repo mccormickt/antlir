@@ -14,6 +14,7 @@ load("//antlir/antlir2/bzl:types.bzl", "BuildApplianceInfo", "FlavorInfo")
 
 load("//antlir/bzl:oss_shim.bzl", fb_cfg_attrs = "empty_dict", fb_refs = "empty_dict", fb_transition = "ret_none") # @oss-enable
 # @oss-disable[end= ]: load("//antlir/antlir2/bzl/image/facebook:fb_cfg.bzl", "fb_cfg_attrs", "fb_refs", "fb_transition")
+load("//antlir/antlir2/cfg/llvm:defs.bzl", "llvm_cfg")
 load("//antlir/antlir2/cfg/systemd:defs.bzl", "systemd_cfg")
 load("//antlir/antlir2/os:cfg.bzl", "os_transition", "os_transition_refs")
 load("//antlir/antlir2/os:oses.bzl", "OSES")
@@ -36,7 +37,7 @@ def cfg_attrs():
     } | (
         # @oss-disable[end= ]: fb_cfg_attrs
         {} # @oss-enable
-    ) | rootless_cfg.attrs | systemd_cfg.attrs
+    ) | rootless_cfg.attrs | systemd_cfg.attrs | llvm_cfg.attrs
 
 def attrs_selected_by_cfg():
     return {
@@ -81,6 +82,7 @@ def _impl(platform: PlatformInfo, refs: struct, attrs: struct) -> PlatformInfo:
 
     constraints = rootless_cfg.transition(refs = refs, attrs = attrs, constraints = constraints)
     constraints = systemd_cfg.transition(constraints = constraints, refs = refs, attrs = attrs, overwrite = False)
+    constraints = llvm_cfg.transition(constraints = constraints, refs = refs, attrs = attrs, overwrite = True)
 
     if is_facebook:
         constraints = fb_transition(refs, attrs, constraints)
@@ -113,6 +115,6 @@ layer_cfg = transition(
     } | (
         # @oss-disable[end= ]: fb_refs
         {} # @oss-enable
-    ) | os_transition_refs() | rootless_cfg.refs | systemd_cfg.refs,
+    ) | os_transition_refs() | rootless_cfg.refs | systemd_cfg.refs | llvm_cfg.refs,
     attrs = cfg_attrs().keys(),
 )

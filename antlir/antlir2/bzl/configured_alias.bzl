@@ -9,6 +9,7 @@ load("//antlir/antlir2/bzl:platform.bzl", "rule_with_default_target_platform")
 load("//antlir/antlir2/bzl:selects.bzl", "selects")
 load("//antlir/antlir2/bzl/image:cfg.bzl", "cfg_attrs")
 # @oss-disable[end= ]: load("//antlir/antlir2/bzl/image/facebook:fb_cfg.bzl", "fb_refs", "fb_transition")
+load("//antlir/antlir2/cfg/llvm:defs.bzl", "llvm_cfg")
 load("//antlir/antlir2/cfg/systemd:defs.bzl", "systemd_cfg")
 load("//antlir/antlir2/os:cfg.bzl", "os_transition", "os_transition_refs")
 load("//antlir/bzl:build_defs.bzl", "get_visibility")
@@ -38,6 +39,12 @@ def _transition_impl(platform: PlatformInfo, refs: struct, attrs: struct) -> Pla
         attrs = attrs,
         overwrite = True,
     )
+    constraints = llvm_cfg.transition(
+        constraints = constraints,
+        refs = refs,
+        attrs = attrs,
+        overwrite = True,
+    )
 
     if is_facebook:
         constraints = fb_transition(
@@ -62,7 +69,7 @@ _transition = transition(
     } | (
         # @oss-disable[end= ]: fb_refs
         {} # @oss-enable
-    ) | os_transition_refs() | rootless_cfg.refs | systemd_cfg.refs,
+    ) | os_transition_refs() | rootless_cfg.refs | systemd_cfg.refs | llvm_cfg.refs,
     attrs = cfg_attrs().keys(),
 )
 
