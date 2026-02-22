@@ -18,9 +18,16 @@ Most real projects should copy/paste the implementation to configure them.
 """
 system_cxx_toolchain(
     name = "cxx",
+    # Absolute paths: prelude's cc_shim uses `os.execl` (no PATH lookup),
+    # so `clang` and `ar` must resolve without a shell.
+    archiver = "/usr/bin/ar",
+    compiler = "/usr/bin/clang",
+    compiler_type = "clang",
+    cxx_compiler = "/usr/bin/clang++",
     cxx_flags = [
         "--std=c++17",
     ],
+    linker = "/usr/bin/clang",
     visibility = ["PUBLIC"],
 )
 
