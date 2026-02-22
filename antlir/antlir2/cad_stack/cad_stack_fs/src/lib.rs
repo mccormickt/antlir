@@ -475,8 +475,12 @@ fn apply_meta_to_dir(dir: &fs::Dir, meta: &Inode, path: &Path) -> Result<()> {
     // before chmod.
     // Use chownat with "." instead of fchown because cap_std::fs::Dir may be
     // opened with O_PATH, which doesn't support fchown.
-    let uid = Uid::from_raw(meta.uid());
-    let gid = Gid::from_raw(meta.gid());
+    // SAFETY: Uid/Gid::from_raw are unsafe because the value must correspond
+    // to a real user/group on the running system; `meta.uid()`/`meta.gid()`
+    // come from persisted metadata and may not match the host, but that's
+    // exactly the intent here (preserving image ownership, not host-validity).
+    let uid = unsafe { Uid::from_raw(meta.uid()) };
+    let gid = unsafe { Gid::from_raw(meta.gid()) };
     chownat(dir, ".", Some(uid), Some(gid), AtFlags::empty())
         .io_context(Operation::SetOwnership, path)?;
 
@@ -508,8 +512,9 @@ fn apply_meta_to_dir(dir: &fs::Dir, meta: &Inode, path: &Path) -> Result<()> {
 fn apply_meta_to_file(file: &fs::File, meta: &Inode, path: &Path) -> Result<()> {
     // Set ownership first.
     // chown clears setuid/setgid bits, so it must come before chmod.
-    let uid = Uid::from_raw(meta.uid());
-    let gid = Gid::from_raw(meta.gid());
+    // SAFETY: see note in apply_meta_to_dir.
+    let uid = unsafe { Uid::from_raw(meta.uid()) };
+    let gid = unsafe { Gid::from_raw(meta.gid()) };
     fchown(file, Some(uid), Some(gid)).io_context(Operation::SetOwnership, path)?;
 
     // Set permissions after chown so setuid/setgid/sticky bits survive
@@ -526,8 +531,9 @@ fn apply_meta_to_file(file: &fs::File, meta: &Inode, path: &Path) -> Result<()> 
 fn apply_meta_to_symlink(dir: &fs::Dir, name: &str, meta: &Inode, path: &Path) -> Result<()> {
     // Symlinks don't have permissions in the traditional sense on Linux,
     // but we can set ownership using chownat with AT_SYMLINK_NOFOLLOW
-    let uid = Uid::from_raw(meta.uid());
-    let gid = Gid::from_raw(meta.gid());
+    // SAFETY: see note in apply_meta_to_dir.
+    let uid = unsafe { Uid::from_raw(meta.uid()) };
+    let gid = unsafe { Gid::from_raw(meta.gid()) };
     chownat(dir, name, Some(uid), Some(gid), AtFlags::SYMLINK_NOFOLLOW)
         .io_context(Operation::SetOwnership, path)?;
 

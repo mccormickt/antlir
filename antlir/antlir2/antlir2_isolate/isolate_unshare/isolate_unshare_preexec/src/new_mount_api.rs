@@ -8,6 +8,7 @@
 //! (Very thin) wrappers around the new Linux mount api
 
 use std::ffi::CString;
+use std::os::fd::AsFd;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
@@ -102,7 +103,7 @@ pub(crate) fn mount_proc(target: &Path, readonly: bool) -> Result<()> {
     let fs_fd = fsopen("proc", FsOpenFlags::FSOPEN_CLOEXEC).context("fsopen(\"proc\") failed")?;
 
     // 2. fsconfig_create(fs_fd) — create the superblock
-    fsconfig_create(&fs_fd).context("fsconfig_create failed")?;
+    fsconfig_create(fs_fd.as_fd()).context("fsconfig_create failed")?;
 
     // 3. fsmount(fs_fd, FSMOUNT_CLOEXEC, attr_flags) — create a detached mount
     let mut attr_flags = MountAttrFlags::MOUNT_ATTR_NOSUID
@@ -111,12 +112,12 @@ pub(crate) fn mount_proc(target: &Path, readonly: bool) -> Result<()> {
     if readonly {
         attr_flags |= MountAttrFlags::MOUNT_ATTR_RDONLY;
     }
-    let mnt_fd =
-        fsmount(&fs_fd, FsMountFlags::FSMOUNT_CLOEXEC, attr_flags).context("fsmount failed")?;
+    let mnt_fd = fsmount(fs_fd.as_fd(), FsMountFlags::FSMOUNT_CLOEXEC, attr_flags)
+        .context("fsmount failed")?;
 
     // 4. move_mount(mnt_fd, "", AT_FDCWD, target, MOVE_MOUNT_F_EMPTY_PATH) — attach it
     move_mount(
-        &mnt_fd,
+        mnt_fd.as_fd(),
         "",
         CWD,
         target,

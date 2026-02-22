@@ -13,6 +13,7 @@ use std::fmt::Debug;
 use std::fs::OpenOptions;
 use std::os::fd::AsFd;
 use std::os::fd::AsRawFd;
+use std::os::fd::BorrowedFd;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
@@ -79,8 +80,13 @@ fn name_bytes<const L: usize>(name: &OsStr) -> [u8; L] {
     buf
 }
 
-fn ensure_is_btrfs(fd: &impl AsFd, path: impl AsRef<Path>) -> Result<()> {
-    let statfs = fstatfs(fd).map_err(std::io::Error::from)?;
+// nix 0.29 `fstatfs` takes `impl AsFd`. `nix::dir::Dir` doesn't implement
+// `AsFd`, only `AsRawFd`, so wrap the raw fd in a `BorrowedFd` at the call
+// boundary.
+fn ensure_is_btrfs(fd: &impl AsRawFd, path: impl AsRef<Path>) -> Result<()> {
+    // SAFETY: the caller owns `fd` for the duration of this call.
+    let borrowed = unsafe { BorrowedFd::borrow_raw(fd.as_raw_fd()) };
+    let statfs = fstatfs(borrowed).map_err(std::io::Error::from)?;
     if statfs.filesystem_type() != BTRFS_SUPER_MAGIC {
         return Err(Error::NotBtrfs(path.as_ref().to_path_buf()));
     }
@@ -109,7 +115,7 @@ impl Subvolume {
 
         ensure_is_btrfs(&fd, path.as_ref())?;
 
-        let stat = fstat(&fd).map_err(std::io::Error::from)?;
+        let stat = fstat(fd.as_raw_fd()).map_err(std::io::Error::from)?;
         if stat.st_ino != INO_SUBVOL {
             return Err(Error::NotSubvol);
         }

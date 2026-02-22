@@ -2410,12 +2410,19 @@ cargo.rust_library(
         "clang_7_0",
         "clang_8_0",
         "clang_9_0",
+        # `runtime` is required for `clang_sys::load()`, which the
+        # repo's bindgen wrapper (third-party/rust/bindgen/bindgen.rs)
+        # calls to dynamically open libclang. Without it the build
+        # script silently omits the symbol and the bindgen binary fails
+        # to link with E0425. Pull in libloading via this feature.
+        "runtime",
     ],
     rustc_flags = ["@$(location :clang-sys-1.8.1-build-script-run[rustc_flags])"],
     visibility = [],
     deps = [
         ":glob-0.3.2",
         ":libc-0.2.174",
+        ":libloading-0.6.7",
     ],
 )
 
@@ -2440,6 +2447,10 @@ cargo.rust_binary(
         "clang_7_0",
         "clang_8_0",
         "clang_9_0",
+        # Match the library's `runtime` feature; build.rs branches on
+        # cfg(feature="runtime") to write the dynamic-load macros into
+        # $OUT_DIR/macros.rs.
+        "runtime",
     ],
     visibility = [],
     deps = [":glob-0.3.2"],
@@ -2464,6 +2475,7 @@ buildscript_run(
         "clang_7_0",
         "clang_8_0",
         "clang_9_0",
+        "runtime",
     ],
     version = "1.8.1",
 )
@@ -7677,6 +7689,16 @@ cargo.rust_library(
     crate = "itertools",
     crate_root = "itertools-0.14.0.crate/src/lib.rs",
     edition = "2018",
+    features = [
+        # itertools' Cargo.toml has `default = ["use_std"]`. Reindeer
+        # produced an empty features list, dropping the default and
+        # losing methods like `Itertools::join` that depend on
+        # `std::string::String` allocation. Re-add the feature so
+        # downstream callers compile.
+        "default",
+        "use_alloc",
+        "use_std",
+    ],
     visibility = [],
     deps = [":either-1.15.0"],
 )
@@ -8138,6 +8160,9 @@ cargo.rust_binary(
     crate = "build_script_build",
     crate_root = "libsqlite3-sys-0.31.0.crate/build.rs",
     edition = "2021",
+    env = {
+        "CARGO_MANIFEST_DIR": "libsqlite3-sys-0.31.0.crate",
+    },
     features = [
         "bundled",
         "bundled_bindings",
@@ -8159,6 +8184,9 @@ buildscript_run(
     name = "libsqlite3-sys-0.31.0-build-script-run",
     package_name = "libsqlite3-sys",
     buildscript_rule = ":libsqlite3-sys-0.31.0-build-script-build",
+    env = {
+        "OPT_LEVEL": "3",
+    },
     features = [
         "bundled",
         "bundled_bindings",
@@ -9705,6 +9733,33 @@ cargo.rust_library(
     edition = "2021",
     visibility = [],
     deps = [":nom-8.0.0"],
+)
+
+alias(
+    name = "nonempty",
+    actual = ":nonempty-0.11.0",
+    visibility = ["PUBLIC"],
+)
+
+http_archive(
+    name = "nonempty-0.11.0.crate",
+    sha256 = "549e471b99ccaf2f89101bec68f4d244457d5a95a9c3d0672e9564124397741d",
+    strip_prefix = "nonempty-0.11.0",
+    urls = ["https://static.crates.io/crates/nonempty/0.11.0/download"],
+    visibility = [],
+)
+
+cargo.rust_library(
+    name = "nonempty-0.11.0",
+    srcs = [":nonempty-0.11.0.crate"],
+    crate = "nonempty",
+    crate_root = "nonempty-0.11.0.crate/src/lib.rs",
+    edition = "2021",
+    features = [
+        "default",
+        "std",
+    ],
+    visibility = [],
 )
 
 http_archive(
@@ -11616,6 +11671,12 @@ cargo.rust_library(
         ":proc-macro2-1.0.95",
         ":quote-1.0.40",
     ],
+)
+
+alias(
+    name = "proc-macro-error2",
+    actual = ":proc-macro-error2-2.0.1",
+    visibility = ["PUBLIC"],
 )
 
 http_archive(

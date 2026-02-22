@@ -103,6 +103,7 @@ def _rust_implicit_test(kwargs, test_kwargs):
         test_kwargs.pop("doctests", None)
         test_kwargs.pop("link_style", None)
         test_kwargs.pop("linker_flags", None)
+        test_kwargs.pop("proc_macro", None)
         test_kwargs["srcs"] = test_kwargs.get("srcs", []) + kwargs.get("srcs", [])
         test_kwargs["deps"] = test_kwargs.get("deps", []) + kwargs.get("deps", [])
         test_kwargs["fb_deps"] = test_kwargs.get("fb_deps", []) + kwargs.get("fb_deps", [])

@@ -83,9 +83,13 @@ pub(crate) fn setup_isolation(isol: &IsolationContext) -> Result<()> {
     )
     .context("while making / private")?;
 
-    // Ensure that the loopback interface is up in our new network namespace in
-    // case anything wants to bind to it for whatever reason
-    crate::net::bring_loopback_up().context("while bringing up loopback interface")?;
+    // Ensure that the loopback interface is up in our new network namespace
+    // in case anything wants to bind to it for whatever reason. Skip when
+    // network is shared with the host: we don't have NET_ADMIN there, and
+    // the host's `lo` is already up.
+    if !enable_network {
+        crate::net::bring_loopback_up().context("while bringing up loopback interface")?;
+    }
 
     let scratch = Path::new("/tmp/__antlir2__");
     create_dir_all(scratch)

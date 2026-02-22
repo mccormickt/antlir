@@ -7,7 +7,7 @@
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
-use std::os::unix::io::FromRawFd;
+use std::os::unix::io::AsRawFd;
 use std::os::unix::io::OwnedFd;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
@@ -114,16 +114,13 @@ impl Args {
                 .spawn()
                 .context("while spawning tee")?;
 
-            // Redirect stdout and stderr to the pipe write end using dup2
-            // SAFETY: STDOUT_FILENO and STDERR_FILENO are valid open file descriptors
-            unsafe {
-                let stdout = OwnedFd::from_raw_fd(nix::libc::STDOUT_FILENO);
-                let stderr = OwnedFd::from_raw_fd(nix::libc::STDERR_FILENO);
-                nix::unistd::dup2(&pipe_write, &mut std::mem::ManuallyDrop::new(stdout))
-                    .context("while redirecting stdout to pipe")?;
-                nix::unistd::dup2(&pipe_write, &mut std::mem::ManuallyDrop::new(stderr))
-                    .context("while redirecting stderr to pipe")?;
-            }
+            // Redirect stdout and stderr to the pipe write end using dup2.
+            // nix 0.29 dup2 takes (RawFd, RawFd); the pinned i32 STDOUT/STDERR
+            // constants and the raw fd of pipe_write are the right inputs.
+            nix::unistd::dup2(pipe_write.as_raw_fd(), nix::libc::STDOUT_FILENO)
+                .context("while redirecting stdout to pipe")?;
+            nix::unistd::dup2(pipe_write.as_raw_fd(), nix::libc::STDERR_FILENO)
+                .context("while redirecting stderr to pipe")?;
 
             // Close the original pipe_write fd (now duplicated to stdout/stderr)
             drop(pipe_write);
