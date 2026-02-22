@@ -49,7 +49,7 @@ rust_library(
     crate_root = "macro.rs",
     proc_macro = True,
     deps = [
-        "proc-macro-error",
+        "proc-macro-error2",
         "proc-macro2",
         "quote",
         "syn",

@@ -5,8 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-use proc_macro_error::abort;
-use proc_macro_error::proc_macro_error;
+use proc_macro_error2::abort;
+use proc_macro_error2::proc_macro_error;
 use quote::ToTokens;
 use quote::format_ident;
 use quote::quote;
