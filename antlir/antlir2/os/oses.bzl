@@ -124,6 +124,11 @@ OSES = [
         architectures = [new_arch_t("x86_64")],
         has_platform_toolchain = False,  # yikes, this will be a whole can of worms, hope we never need it...
     ),
+    _new_os(
+        name = "wolfi",
+        architectures = [new_arch_t("x86_64")],
+        has_platform_toolchain = False,
+    ),
 ]
 
 if is_facebook:

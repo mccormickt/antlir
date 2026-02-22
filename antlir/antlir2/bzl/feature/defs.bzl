@@ -18,6 +18,7 @@ load("//antlir/antlir2/features/mount:mount.bzl", "host_mount", "layer_mount")
 load("//antlir/antlir2/features/package_install:package_install.bzl", "package_install", "package_remove")
 load("//antlir/antlir2/features/remove:remove.bzl", "remove")
 load("//antlir/antlir2/features/requires:requires.bzl", "requires")
+load("//antlir/antlir2/features/apk:apk.bzl", "apks_install", "apks_remove", "apks_remove_if_exists")
 load("//antlir/antlir2/features/rpm:rpm.bzl", "dnf_module_enable", "rpms_install", "rpms_remove", "rpms_remove_if_exists", "rpms_upgrade")
 load("//antlir/antlir2/features/symlink:symlink.bzl", "ensure_dir_symlink", "ensure_file_symlink")
 load("//antlir/antlir2/features/tarball:tarball.bzl", "tarball")
@@ -30,6 +31,9 @@ feature = struct(
     apt_install = apt_install,
     apt_remove = apt_remove,
     apt_remove_if_exists = apt_remove_if_exists,
+    apks_install = apks_install,
+    apks_remove = apks_remove,
+    apks_remove_if_exists = apks_remove_if_exists,
     clone = clone,
     ensure_dirs_exist = ensure_dirs_exist,
     ensure_subdirs_exist = ensure_subdirs_exist,

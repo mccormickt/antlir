@@ -1,0 +1,35 @@
+load("//antlir/bzl:build_defs.bzl", "buck_genrule", "http_archive")
+
+oncall("antlir")
+
+http_archive(
+    name = "melange-archive",
+    urls = ["https://github.com/chainguard-dev/melange/releases/download/v0.43.2/melange_0.43.2_linux_amd64.tar.gz"],
+    sha256 = "337c316a2911191eb1db13d744109489d1a8c0c8bb4530ba599dd4050a3b3c03",
+    strip_prefix = "melange_0.43.2_linux_amd64",
+    visibility = [],
+)
+
+buck_genrule(
+    name = "melange",
+    out = "melange",
+    cmd = "cp $(location :melange-archive)/melange $OUT && chmod +x $OUT",
+    executable = True,
+    visibility = ["PUBLIC"],
+)
+
+http_archive(
+    name = "apko-archive",
+    urls = ["https://github.com/chainguard-dev/apko/releases/download/v1.2.7/apko_1.2.7_linux_amd64.tar.gz"],
+    sha256 = "5151b4a79e9a7fd495d5f7591cb25293b747bc9e4eb5929643ba80701bfa8153",
+    strip_prefix = "apko_1.2.7_linux_amd64",
+    visibility = [],
+)
+
+buck_genrule(
+    name = "apko",
+    out = "apko",
+    cmd = "cp $(location :apko-archive)/apko $OUT && chmod +x $OUT",
+    executable = True,
+    visibility = ["PUBLIC"],
+)
