@@ -65,6 +65,8 @@ Planner = record(
     parent_layer_contents = field(bool, default = False),
     # plan requires access to dnf repos available to this layer
     dnf = field(bool, default = False),
+    # plan requires access to apk repos available to this layer
+    apk = field(bool, default = False),
     # plan requires access to the build appliance for this layer
     build_appliance = field(bool, default = False),
     # plan requires access to the layer's target_arch (x86_64, aarch64)

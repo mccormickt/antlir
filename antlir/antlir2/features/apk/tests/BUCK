@@ -1,0 +1,99 @@
+load("//antlir/antlir2/bzl/feature:defs.bzl", "feature")
+load("//antlir/bzl:build_defs.bzl", "python_unittest")
+load(":defs.bzl", "build_test_app_apk", "expected_t", "roundtrip_test_apks", "test_apks")
+
+oncall("antlir")
+
+python_unittest(
+    name = "test-driver",
+    srcs = ["test_driver.py"],
+    resources = glob(["fixtures/apk-output/*"]),
+    deps = ["//antlir/antlir2/features/apk:driver-lib"],
+)
+
+# All tests pre-install busybox so the test layer has a /bin/sh that
+# `check_apks.sh` can use as its interpreter. Tests that exercise removal
+# target a different package (e.g. `bc`) so busybox itself stays put.
+
+test_apks(
+    name = "simple",
+    expected = expected_t(
+        installed = ["busybox", "bc"],
+        world_entries = ["busybox", "bc"],
+    ),
+    features = [
+        feature.apks_install(apks = ["busybox", "bc"]),
+    ],
+)
+
+simple = ":simple--layer"
+
+test_apks(
+    name = "remove",
+    expected = expected_t(
+        installed = ["busybox"],  # still here, provides /bin/sh
+        not_installed = ["bc"],
+    ),
+    features = [
+        feature.apks_remove(apks = ["bc"]),
+    ],
+    parent_layer = simple,
+)
+
+test_apks(
+    name = "remove-if-exists-no-op",
+    expected = expected_t(
+        installed = ["busybox"],  # still here, provides /bin/sh
+        not_installed = ["nonexistent"],
+    ),
+    features = [
+        feature.apks_install(apks = ["busybox"]),
+        feature.apks_remove_if_exists(apks = ["nonexistent"]),
+    ],
+)
+
+# Round-trip tests: build a layer → wrap as .apk → drop into local
+# apk_repo → install via apk_additional_repos → verify. This is the
+# user-stated end-to-end flow (image.layer → package.apk → apk_repo →
+# apks_install). Each case adds busybox to the install list so the
+# child layer has a usable /bin/sh for `check_apks.sh`.
+
+roundtrip_test_apks(
+    name = "roundtrip-foo",
+    app_name = "foo",
+    app_features = [
+        feature.ensure_dirs_exist(dirs = "/foo"),
+    ],
+    install = ["foo", "busybox"],
+    extra_install = [],
+)
+
+# Build foo separately so bar can declare it as an apk-level depends
+# (apk's resolver must pull foo from the same local repo).
+build_test_app_apk(
+    name = "roundtrip-bar-depends-foo--foo",
+    apk_name = "foo",
+    features = [feature.ensure_dirs_exist(dirs = "/foo")],
+)
+
+roundtrip_test_apks(
+    name = "roundtrip-bar-depends-foo",
+    app_name = "bar",
+    app_features = [feature.ensure_dirs_exist(dirs = "/bar")],
+    app_depends = ["foo"],
+    install = ["bar", "busybox"],
+    extra_apks = [":roundtrip-bar-depends-foo--foo"],
+    # bar pulls foo transitively via its `depends` metadata, so foo
+    # should land in the child layer too.
+    extra_install = ["foo"],
+)
+
+# Version-pin install spec: `foo=1.0.0-r0` exercises the parser path
+# that strips `=<version>` off the requested subject when comparing
+# against the apk db.
+roundtrip_test_apks(
+    name = "roundtrip-version-pin",
+    app_name = "foo",
+    app_features = [feature.ensure_dirs_exist(dirs = "/foo")],
+    install = ["foo=1.0.0-r0", "busybox"],
+)

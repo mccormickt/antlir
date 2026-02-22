@@ -1,0 +1,2 @@
+fetch https://packages.wolfi.dev/os/x86_64/APKINDEX.tar.gz
+(1/2) Installing musl (1.2.4-r0)

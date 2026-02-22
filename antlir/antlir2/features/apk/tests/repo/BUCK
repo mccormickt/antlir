@@ -1,0 +1,66 @@
+load("//antlir/antlir2/bzl/feature:defs.bzl", "feature")
+load("//antlir/antlir2/bzl/image:defs.bzl", "image")
+load("//antlir/antlir2/bzl/package:defs.bzl", "package")
+load("//antlir/antlir2/package_managers/apk/rules:apk.bzl", "apk")
+load("//antlir/antlir2/package_managers/apk/rules:repo.bzl", "apk_repo")
+
+oncall("antlir")
+
+# Test package: foo
+image.layer(
+    name = "foo-1.0--layer",
+    features = [
+        feature.ensure_dirs_exist(dirs = "/foo"),
+    ],
+    default_os = "wolfi",
+    rootless = True,
+)
+
+package.apk(
+    name = "foo-1.0--package",
+    layer = ":foo-1.0--layer",
+    apk_name = "foo",
+    version = "1.0.0",
+)
+
+apk(
+    name = "foo-1.0",
+    apk = ":foo-1.0--package",
+    apk_name = "foo",
+    version = "1.0.0",
+)
+
+# Test package: bar (depends on foo)
+image.layer(
+    name = "bar-1.0--layer",
+    features = [
+        feature.ensure_dirs_exist(dirs = "/bar"),
+    ],
+    default_os = "wolfi",
+    rootless = True,
+)
+
+package.apk(
+    name = "bar-1.0--package",
+    layer = ":bar-1.0--layer",
+    apk_name = "bar",
+    version = "1.0.0",
+    depends = ["foo"],
+)
+
+apk(
+    name = "bar-1.0",
+    apk = ":bar-1.0--package",
+    apk_name = "bar",
+    version = "1.0.0",
+)
+
+# Test APK repository
+apk_repo(
+    name = "test-repo",
+    apks = [
+        ":foo-1.0",
+        ":bar-1.0",
+    ],
+    visibility = ["//antlir/antlir2/features/apk/tests:"],
+)

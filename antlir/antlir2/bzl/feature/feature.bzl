@@ -81,6 +81,7 @@ load("//antlir/antlir2/features/oci/oci_volume:oci_volume.bzl", "oci_volume_rule
 load("//antlir/antlir2/features/oci/oci_working_dir:oci_working_dir.bzl", "oci_working_dir_rule")
 load("//antlir/antlir2/features/remove:remove.bzl", "remove_rule")
 load("//antlir/antlir2/features/requires:requires.bzl", "requires_rule")
+load("//antlir/antlir2/features/apk:apk.bzl", "apks_rule")
 load("//antlir/antlir2/features/rpm:rpm.bzl", "rpms_rule")
 load("//antlir/antlir2/features/symlink:symlink.bzl", "ensure_dir_symlink_rule", "ensure_file_symlink_rule")
 load("//antlir/antlir2/features/tarball:tarball.bzl", "tarball_rule")
@@ -96,6 +97,7 @@ load("//antlir/bzl:types.bzl", "types")
 load(":cfg.bzl", "feature_cfg")
 
 _anon_rules = {
+    "apk": apks_rule,
     "apt": apt_rule,
     "clone": clone_rule,
     "dot_meta": dot_meta_rule,

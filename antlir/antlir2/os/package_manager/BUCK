@@ -10,6 +10,31 @@ constraint(
         "dnf",
         "dnf5",
         "apt",
+        "apk",
     ],
     visibility = ["PUBLIC"],
+)
+
+constraint_value(
+    name = "none",
+    constraint_setting = ":package_manager",
+    visibility = ["//antlir/antlir2/os:"],
+)
+
+constraint_value(
+    name = "dnf",
+    constraint_setting = ":package_manager",
+    visibility = ["//antlir/antlir2/os:"],
+)
+
+constraint_value(
+    name = "dnf5",
+    constraint_setting = ":package_manager",
+    visibility = ["//antlir/antlir2/os:"],
+)
+
+constraint_value(
+    name = "apk",
+    constraint_setting = ":package_manager",
+    visibility = ["//antlir/antlir2/os:"],
 )

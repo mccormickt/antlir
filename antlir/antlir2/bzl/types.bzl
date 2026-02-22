@@ -16,10 +16,16 @@ FeatureInfo = provider(
 
 FlavorInfo = provider(
     fields = [
+        "apk_info",  # FlavorApkInfo provider for apk-based distros (e.g. Wolfi)
         "dnf_info",  # FlavorDnfInfo provider for dnf-based distros
         "label",  # The buck label for this flavor
     ]
 )
+
+FlavorApkInfo = provider(fields = [
+    "default_repo_urls",  # list of repo URL strings (e.g. https://packages.wolfi.dev/os)
+    "default_signing_keys",  # list of signing key artifacts
+])
 
 FlavorDnfInfo = provider(
     fields = [

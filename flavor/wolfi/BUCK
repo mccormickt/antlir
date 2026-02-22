@@ -1,0 +1,47 @@
+load("//antlir/antlir2/bzl/flavor:defs.bzl", "flavor")
+load("//antlir/antlir2/bzl/image:build_appliance.bzl", "build_appliance")
+load("//antlir/bzl:build_defs.bzl", "buck_genrule", "export_file")
+
+flavor(
+    name = "wolfi",
+    default_apk_repo_urls = [
+        "https://packages.wolfi.dev/os",
+    ],
+    visibility = ["PUBLIC"],
+)
+
+# Build the Wolfi build appliance rootfs with apko.
+#
+# apko is a standalone binary (no Docker daemon needed). Given an apko YAML
+# config it resolves the Wolfi repo, downloads the listed .apk packages with
+# their signed APKINDEX, and writes a reproducible rootfs tarball.
+#
+# `apko build-minirootfs` writes a tarball, but antlir2's build_appliance
+# rule and the isolation code expect a directory to bind-mount. We extract
+# the tarball inline.
+buck_genrule(
+    name = "build-appliance.dir",
+    out = ".",
+    cmd = """
+        set -euo pipefail
+        $(exe //antlir/antlir2/package_managers/apk/tools:apko) \
+            build-minirootfs \
+            $(location :wolfi-base.apko.yaml) \
+            $TMP/rootfs.tar
+        # apko writes an uncompressed tar despite the ext; use auto-detect.
+        # Skip device nodes under dev/ — extracting them needs CAP_MKNOD
+        # which we don't have in the unprivileged genrule.
+        tar -xaf $TMP/rootfs.tar -C $OUT --exclude='dev/*'
+    """,
+)
+
+build_appliance(
+    name = "build-appliance",
+    src = ":build-appliance.dir",
+    visibility = ["PUBLIC"],
+)
+
+export_file(
+    name = "wolfi-base.apko.yaml",
+    src = "wolfi-base.apko.yaml",
+)

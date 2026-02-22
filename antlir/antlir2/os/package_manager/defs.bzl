@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 _PACKAGE_MANAGER_SELECT = select({
+    "//antlir/antlir2/os/package_manager:package_manager[apk]": "apk",
     "//antlir/antlir2/os/package_manager:package_manager[apt]": "apt",
     "//antlir/antlir2/os/package_manager:package_manager[dnf5]": "dnf5",
     "//antlir/antlir2/os/package_manager:package_manager[dnf]": "dnf",

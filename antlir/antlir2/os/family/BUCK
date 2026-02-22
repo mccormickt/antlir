@@ -11,6 +11,13 @@ constraint(
         "fedora",
         "rhel",
         "debian",
+        "wolfi",
     ],
+    visibility = ["PUBLIC"],
+)
+
+constraint_value(
+    name = "wolfi",
+    constraint_setting = ":family",
     visibility = ["PUBLIC"],
 )
