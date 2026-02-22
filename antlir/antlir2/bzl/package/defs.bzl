@@ -9,6 +9,7 @@ load("//antlir/antlir2/bzl/image:cfg.bzl", "attrs_selected_by_cfg")
 load("//antlir/antlir2/features:defs.bzl", "FeaturePluginPluginKind")
 load("//antlir/buck2/bzl:ensure_single_output.bzl", "ensure_single_output")
 load("//antlir/bzl:internal_external.bzl", "internal_external")
+load(":apko.bzl", "apko")
 load(":attrs.bzl", "common_attrs", "default_attrs")
 load(":btrfs.bzl", "btrfs")
 load(":cfg.bzl", "package_cfg")
@@ -347,6 +348,50 @@ _rpm, _rpm_anon = _new_package_rule(
     uses_build_appliance = True,
 )
 
+_apk, _apk_anon = _new_package_rule(
+    rule_attrs = {
+        "apk_name": attrs.string(),
+        "version": attrs.string(default = "1.0.0"),
+        "epoch": attrs.int(default = 0),
+        "arch": attrs.enum(
+            ["x86_64", "aarch64", "noarch"],
+            default = arch_select(x86_64 = "x86_64", aarch64 = "aarch64"),
+        ),
+        "description": attrs.string(default = ""),
+        "license": attrs.string(default = "MIT"),
+        "depends": attrs.list(attrs.string(), default = []),
+        "provides": attrs.list(attrs.string(), default = []),
+        "signing_key": attrs.option(attrs.source(), default = None),
+        "melange_keyring": attrs.list(
+            attrs.string(),
+            default = [],
+            doc = """
+                Keyring URLs/paths used by melange to verify packages
+                fetched from `melange_repositories`. Empty (the default)
+                falls back to the wolfi-signing public key URL.
+            """,
+        ),
+        "melange_repositories": attrs.list(
+            attrs.string(),
+            default = [],
+            doc = """
+                Repositories that melange's build environment may fetch
+                from while assembling the package. Empty (the default)
+                falls back to upstream Wolfi (`packages.wolfi.dev/os`).
+                Override to package against Alpine, Chainguard, or a
+                pinned mirror.
+            """,
+        ),
+        "_melange": attrs.exec_dep(
+            default = "antlir//antlir/antlir2/package_managers/apk/tools:melange",
+        ),
+    },
+    format = "apk",
+    dot_meta = False,
+    force_extension = "apk",
+    uses_build_appliance = True,
+)
+
 # @unused
 _vfat, _vfat_anon = _new_package_rule(
     rule_attrs = {
@@ -454,6 +499,8 @@ _cad_stack, _cad_stack_anon = _new_package_rule(
 )
 
 package = struct(
+    apk = package_macro(_apk, always_rootless = True),
+    apko = apko,
     btrfs = btrfs,
     cad_stack = package_macro(_cad_stack, always_rootless = True),
     cpio = package_macro(_cpio),

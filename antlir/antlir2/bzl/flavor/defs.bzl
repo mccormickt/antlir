@@ -4,11 +4,21 @@
 # LICENSE file in the root directory of this source tree.
 
 load("//antlir/antlir2/bzl:platform.bzl", "rule_with_default_target_platform")
-load("//antlir/antlir2/bzl:types.bzl", "FlavorDnfInfo", "FlavorInfo")
+load("//antlir/antlir2/bzl:types.bzl", "FlavorApkInfo", "FlavorDnfInfo", "FlavorInfo")
 # @oss-disable[end= ]: load("//antlir/antlir2/bzl/flavor/facebook:rou.bzl", fb_extract_rou = "extract_rou")
 load("//antlir/antlir2/package_managers/dnf/rules:repo.bzl", "RepoSetInfo")
 
 _flavor_attrs = {
+    "default_apk_repo_urls": attrs.list(
+        attrs.string(),
+        default = [],
+        doc = "Default APK repository URLs for apk-based distros (e.g. Wolfi)",
+    ),
+    "default_apk_signing_keys": attrs.list(
+        attrs.source(),
+        default = [],
+        doc = "Default APK signing key files for apk-based distros",
+    ),
     "default_dnf_excluded_rpms": attrs.list(
         attrs.string(),
         default = [],
@@ -17,7 +27,10 @@ _flavor_attrs = {
         attrs.dep(providers = [RepoSetInfo]),
         default = None,
     ),
-    "default_dnf_repo_set": attrs.dep(providers = [RepoSetInfo]),
+    "default_dnf_repo_set": attrs.option(
+        attrs.dep(providers = [RepoSetInfo]),
+        default = None,
+    ),
     "default_dnf_versionlock": attrs.option(
         attrs.source(),
         default = None,
@@ -26,15 +39,27 @@ _flavor_attrs = {
 }
 
 def _impl(ctx: AnalysisContext) -> list[Provider]:
+    dnf_info = None
+    if ctx.attrs.default_dnf_repo_set:
+        dnf_info = FlavorDnfInfo(
+            default_excluded_rpms = ctx.attrs.default_dnf_excluded_rpms,
+            default_extra_repo_set = ctx.attrs.default_dnf_extra_repo_set,
+            default_repo_set = ctx.attrs.default_dnf_repo_set,
+            default_versionlock = ctx.attrs.default_dnf_versionlock,
+            reflink_flavor = ctx.attrs.rpm_reflink_flavor,
+        )
+
+    apk_info = None
+    if ctx.attrs.default_apk_repo_urls:
+        apk_info = FlavorApkInfo(
+            default_repo_urls = ctx.attrs.default_apk_repo_urls,
+            default_signing_keys = ctx.attrs.default_apk_signing_keys,
+        )
+
     return [
         FlavorInfo(
-            dnf_info = FlavorDnfInfo(
-                default_excluded_rpms = ctx.attrs.default_dnf_excluded_rpms,
-                default_extra_repo_set = ctx.attrs.default_dnf_extra_repo_set,
-                default_repo_set = ctx.attrs.default_dnf_repo_set,
-                default_versionlock = ctx.attrs.default_dnf_versionlock,
-                reflink_flavor = ctx.attrs.rpm_reflink_flavor,
-            ),
+            apk_info = apk_info,
+            dnf_info = dnf_info,
             label = ctx.label,
         ),
         DefaultInfo(
@@ -42,7 +67,7 @@ def _impl(ctx: AnalysisContext) -> list[Provider]:
                 "default_versionlock": [DefaultInfo(ctx.attrs.default_dnf_versionlock)],
             }
         ),
-    # @oss-disable[end= ]: ] + fb_extract_rou(ctx.attrs.default_dnf_repo_set[RepoSetInfo])
+    # @oss-disable[end= ]: ] + (fb_extract_rou(ctx.attrs.default_dnf_repo_set[RepoSetInfo]) if ctx.attrs.default_dnf_repo_set else [])
     ] # @oss-enable
 
 _flavor = rule(

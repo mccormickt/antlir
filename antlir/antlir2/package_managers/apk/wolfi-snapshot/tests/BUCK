@@ -1,0 +1,37 @@
+# Consumption tests for the vendored Wolfi `os` snapshot. Each builds an
+# image.layer entirely offline against `:os` — the `apk_repos` attr pins
+# the layer's apk repositories to the snapshot, replacing the wolfi
+# flavor's live `packages.wolfi.dev/os` URL.
+
+load("//antlir/antlir2/bzl/feature:defs.bzl", "feature")
+load("//antlir/antlir2/bzl/image:defs.bzl", "image")
+load("//antlir/antlir2/testing:image_test.bzl", "image_sh_test")
+
+# A minimal consumer: install two packages and assert they landed.
+image.layer(
+    name = "snapshot-consumer--layer",
+    default_os = "wolfi",
+    # btrfs working volumes require a btrfs filesystem; cad-stack works on
+    # any filesystem, so the test runs regardless of the host's fs.
+    working_format = "cad-stack",
+    apk_repos = ["//antlir/antlir2/package_managers/apk/wolfi-snapshot:os"],
+    features = [
+        feature.apks_install(apks = ["busybox", "bc"]),
+    ],
+)
+
+image_sh_test(
+    name = "snapshot-consumer",
+    layer = ":snapshot-consumer--layer",
+    test = "check_installed.sh",
+    env = {"EXPECT_INSTALLED": "busybox bc"},
+)
+
+# End-to-end demonstration: compile and run a real Rust program inside
+# `:rust-container--layer`, using only the rust + gcc toolchain that
+# layer installed offline from the snapshot.
+image_sh_test(
+    name = "rust-demo",
+    layer = "//antlir/antlir2/package_managers/apk/wolfi-snapshot:rust-container--layer",
+    test = "rust_demo.sh",
+)

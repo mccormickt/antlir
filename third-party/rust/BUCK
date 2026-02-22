@@ -12111,6 +12111,12 @@ alias(
     visibility = ["PUBLIC"],
 )
 
+alias(
+    name = "quick-xml",
+    actual = ":quick-xml-0-23",
+    visibility = ["PUBLIC"],
+)
+
 cargo.rust_library(
     name = "quick-xml-0.23.1-quick-xml-0-23",
     srcs = [":quick-xml-0.23.1.crate"],

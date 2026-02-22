@@ -10,6 +10,8 @@ use serde::Deserialize;
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Spec {
+    Apk(crate::apk::Apk),
+    Apko(crate::apko::Apko),
     Btrfs(crate::btrfs::Btrfs),
     CadStack(crate::cad_stack::CadStack),
     Cpio(crate::cpio::Cpio),

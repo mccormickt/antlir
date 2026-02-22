@@ -20,6 +20,8 @@ use cap_std::fs::Dir;
 use clap::Parser;
 use json_arg::JsonFile;
 
+mod apk;
+mod apko;
 mod btrfs;
 mod cad_stack;
 mod cpio;
@@ -141,6 +143,11 @@ fn main() -> Result<()> {
     };
 
     match args.spec.into_inner() {
+        Spec::Apk(p) => p.build(
+            &args.out,
+            &materialize_layer().context("layer required for this format")?,
+        ),
+        Spec::Apko(p) => p.build(&args.out),
         Spec::Btrfs(p) => p.build(&args.out),
         Spec::CadStack(p) => p.build(
             &args.out,

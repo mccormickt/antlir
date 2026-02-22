@@ -1,0 +1,36 @@
+# Vendored, hermetic snapshot of the Wolfi `os` apk repository.
+#
+# `:os` provides `ApkRepoInfo`; consume it from an `image.layer` with
+#   apk_repos = ["//antlir/antlir2/package_managers/apk/wolfi-snapshot:os"]
+# (replaces the flavor's live URL repos), or with `apk_additional_repos`.
+#
+# Only the minimal index and `wolfi.lock.bzl` are committed; the `.apk`
+# blobs are fetched at build time (buck2 `download_file`, sha256-pinned).
+#
+# `:rust-container--layer` is a worked example: a Wolfi image carrying a
+# working Rust toolchain. The `tests/` directory compiles and runs a real
+# Rust program inside it.
+#
+# Regenerate `wolfi.lock.bzl` + the index with `generate.py`.
+
+load("//antlir/antlir2/bzl/feature:defs.bzl", "feature")
+load("//antlir/antlir2/bzl/image:defs.bzl", "image")
+load(":defs.bzl", "wolfi_snapshot")
+load(":wolfi.lock.bzl", "WOLFI_SNAPSHOT")
+
+oncall("antlir")
+
+wolfi_snapshot(name = "os", snapshot = WOLFI_SNAPSHOT)
+
+# A Wolfi container carrying a working Rust toolchain, resolved against
+# `:os`. `gcc` is included because rustc shells out to `cc` to link.
+image.layer(
+    name = "rust-container--layer",
+    default_os = "wolfi",
+    # btrfs working volumes need a btrfs filesystem; cad-stack works anywhere.
+    working_format = "cad-stack",
+    apk_repos = [":os"],
+    features = [
+        feature.apks_install(apks = ["rust", "gcc", "busybox", "ca-certificates-bundle"]),
+    ],
+)

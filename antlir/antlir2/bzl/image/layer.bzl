@@ -25,6 +25,7 @@ load(
 )
 load("//antlir/antlir2/os:package.bzl", "get_default_os_for_package")
 # @oss-disable[end= ]: load("//antlir/antlir2/os/facebook:package.bzl", "get_default_rou_for_package")
+load("//antlir/antlir2/package_managers/apk/rules:repo.bzl", "ApkRepoInfo")
 load("//antlir/antlir2/package_managers/dnf/rules:repo.bzl", "RepoInfo", "RepoSetInfo")
 load("//antlir/bzl:build_defs.bzl", "config", "get_visibility")
 load("//antlir/bzl:constants.bzl", "REPO_CFG")
@@ -257,62 +258,83 @@ def _impl_with_features(features: ProviderCollection, *, ctx: AnalysisContext) -
     for plugin in plugin_list:
         all_plugins[str(plugin.label.raw_target())] = plugin[FeaturePluginInfo]
 
+    # DNF repo resolution (only for flavors with dnf_info)
     dnf_available_repos = []
-    if types.is_list(ctx.attrs.dnf_available_repos):
-        dnf_available_repos = ctx.attrs.dnf_available_repos
-    elif ctx.attrs.dnf_available_repos != None:
-        dnf_available_repos = list(ctx.attrs.dnf_available_repos[RepoSetInfo].repos)
-    else:
-        dnf_available_repos = list(flavor_info.dnf_info.default_repo_set[RepoSetInfo].repos)
-
-    dnf_additional_repos = ctx.attrs.dnf_additional_repos or []
-    if not types.is_list(dnf_additional_repos):
-        dnf_additional_repos = [dnf_additional_repos]
-
-    dnf_additional_repos = dnf_additional_repos + ctx.attrs._dnf_auto_additional_repos
-
-    for repo in dnf_additional_repos:
-        if types.is_string(repo):
-            extra_repo = _extra_repo_name_to_repo(repo, flavor_info)
-            if extra_repo != None:
-                dnf_available_repos.append(extra_repo)
-        elif RepoSetInfo in repo:
-            dnf_available_repos.extend(repo[RepoSetInfo].repos)
-        elif RepoInfo in repo:
-            dnf_available_repos.append(repo)
+    dnf_versionlock = None
+    dnf_excluded_rpms = []
+    if flavor_info and flavor_info.dnf_info:
+        if types.is_list(ctx.attrs.dnf_available_repos):
+            dnf_available_repos = ctx.attrs.dnf_available_repos
+        elif ctx.attrs.dnf_available_repos != None:
+            dnf_available_repos = list(ctx.attrs.dnf_available_repos[RepoSetInfo].repos)
         else:
-            fail("Unknown type for repo {} in dnf_additional_repos: ".format(repo))
+            dnf_available_repos = list(flavor_info.dnf_info.default_repo_set[RepoSetInfo].repos)
 
-    for logical_id in ctx.attrs.dnf_exclude_repos:
-        to_remove = None
-        for repo in dnf_available_repos:
-            if repo[RepoInfo].logical_id == logical_id:
-                to_remove = repo
-        if not to_remove:
-            fail(
-                "Logical id '{}' does not match any repo ({}), remove it".format(
-                    logical_id,
-                    [r[RepoInfo].logical_id for r in dnf_available_repos],
+        dnf_additional_repos = ctx.attrs.dnf_additional_repos or []
+        if not types.is_list(dnf_additional_repos):
+            dnf_additional_repos = [dnf_additional_repos]
+
+        dnf_additional_repos = dnf_additional_repos + ctx.attrs._dnf_auto_additional_repos
+
+        for repo in dnf_additional_repos:
+            if types.is_string(repo):
+                extra_repo = _extra_repo_name_to_repo(repo, flavor_info)
+                if extra_repo != None:
+                    dnf_available_repos.append(extra_repo)
+            elif RepoSetInfo in repo:
+                dnf_available_repos.extend(repo[RepoSetInfo].repos)
+            elif RepoInfo in repo:
+                dnf_available_repos.append(repo)
+            else:
+                fail("Unknown type for repo {} in dnf_additional_repos: ".format(repo))
+
+        for logical_id in ctx.attrs.dnf_exclude_repos:
+            to_remove = None
+            for repo in dnf_available_repos:
+                if repo[RepoInfo].logical_id == logical_id:
+                    to_remove = repo
+            if not to_remove:
+                fail(
+                    "Logical id '{}' does not match any repo ({}), remove it".format(
+                        logical_id,
+                        [r[RepoInfo].logical_id for r in dnf_available_repos],
+                    )
                 )
-            )
-        dnf_available_repos.remove(to_remove)
+            dnf_available_repos.remove(to_remove)
 
-    dnf_versionlock = ctx.attrs.dnf_versionlock or flavor_info.dnf_info.default_versionlock
-    dnf_excluded_rpms = list(ctx.attrs.dnf_excluded_rpms) if ctx.attrs.dnf_excluded_rpms != None else list(flavor_info.dnf_info.default_excluded_rpms)
+        dnf_versionlock = ctx.attrs.dnf_versionlock or flavor_info.dnf_info.default_versionlock
+        dnf_excluded_rpms = list(ctx.attrs.dnf_excluded_rpms) if ctx.attrs.dnf_excluded_rpms != None else list(flavor_info.dnf_info.default_excluded_rpms)
 
-    # rpmsign is missing a dependency: /usr/lib64/libtss2-rc.so.0
-    # (P557719932). This failure occurss because tpm2-tss provides
-    # /usr/lib64/libtss2-rc.so.0, but aziot-identity-service contains
-    # /usr/lib64/aziot-identity-service/libtss2-rc.so.0 and dnf will happily
-    # install that to satisfy the rpmsign dependency, even though it doesn't
-    # actually do that. Since aziot-identity-service isn't actually used
-    # anywhere, just exclude it
-    if "aziot-identity-service" not in dnf_excluded_rpms:
-        dnf_excluded_rpms.append("aziot-identity-service")
+        # rpmsign is missing a dependency: /usr/lib64/libtss2-rc.so.0
+        # (P557719932). This failure occurss because tpm2-tss provides
+        # /usr/lib64/libtss2-rc.so.0, but aziot-identity-service contains
+        # /usr/lib64/aziot-identity-service/libtss2-rc.so.0 and dnf will happily
+        # install that to satisfy the rpmsign dependency, even though it doesn't
+        # actually do that. Since aziot-identity-service isn't actually used
+        # anywhere, just exclude it
+        if "aziot-identity-service" not in dnf_excluded_rpms:
+            dnf_excluded_rpms.append("aziot-identity-service")
 
-    # https://fb.workplace.com/groups/upstreampackaging/posts/2218930438568048
-    if "mft" not in dnf_excluded_rpms:
-        dnf_excluded_rpms.append("mft")
+        # https://fb.workplace.com/groups/upstreampackaging/posts/2218930438568048
+        if "mft" not in dnf_excluded_rpms:
+            dnf_excluded_rpms.append("mft")
+
+    # APK repo resolution. `apk_repos`, when set, *replaces* the flavor's
+    # default URL repos (mirroring `dnf_available_repos`); this lets a layer
+    # build hermetically against only locally-built `apk_repo` targets.
+    # `apk_additional_repos` always appends.
+    apk_repo_urls = []
+    apk_local_repos = []
+    if ctx.attrs.apk_repos != None:
+        for repo in ctx.attrs.apk_repos:
+            apk_local_repos.append(repo[ApkRepoInfo].repo_dir)
+    elif flavor_info and flavor_info.apk_info:
+        apk_repo_urls = list(flavor_info.apk_info.default_repo_urls)
+
+    for repo in ctx.attrs.apk_additional_repos or []:
+        if ApkRepoInfo not in repo:
+            fail("apk_additional_repos entry {} does not provide ApkRepoInfo".format(repo))
+        apk_local_repos.append(repo[ApkRepoInfo].repo_dir)
 
     # The image build is split into phases based on features' `build_phase`
     # property.
@@ -428,6 +450,11 @@ def _impl_with_features(features: ProviderCollection, *, ctx: AnalysisContext) -
                         "dnf_excluded_rpms": dnf_excluded_rpms,
                         "dnf_versionlock": dnf_versionlock,
                         "dnf_versionlock_extend": ctx.attrs.dnf_versionlock_extend,
+                    }
+                if planner.apk:
+                    kwargs |= {
+                        "apk_local_repos": apk_local_repos,
+                        "apk_repo_urls": apk_repo_urls,
                     }
                 for id in planner.previous_phase_plans:
                     if id not in previous_phase_plans:
@@ -567,6 +594,28 @@ def _impl_with_features(features: ProviderCollection, *, ctx: AnalysisContext) -
 
 _layer_attrs = {
     "antlir2": attrs.exec_dep(default = "antlir//antlir/antlir2/antlir2:antlir2"),
+    "apk_additional_repos": attrs.list(
+        attrs.dep(providers = [ApkRepoInfo]),
+        default = [],
+        doc = """
+            Make additional apk repositories (built locally as `apk_repo`
+            targets) available while building this layer. The output
+            `repo_dir` of each `ApkRepoInfo` is materialized alongside the
+            flavor's default URL repos and exposed to the apk driver as a
+            unified `--repos` directory.
+        """,
+    ),
+    "apk_repos": attrs.option(
+        attrs.list(attrs.dep(providers = [ApkRepoInfo])),
+        default = None,
+        doc = """
+            Pin this layer's apk repositories to exactly these locally-built
+            `apk_repo` (or equivalent `ApkRepoInfo`) targets, *replacing* the
+            flavor's default URL repos. Use this to build hermetically against
+            a vendored snapshot. When unset, the flavor's default URL repos
+            are used. `apk_additional_repos` is appended on top either way.
+        """,
+    ),
     "default_mountpoint": attrs.option(attrs.string(), default = None),
     "dnf_additional_repos": attrs.option(
         attrs.one_of(

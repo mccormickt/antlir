@@ -73,3 +73,9 @@ os_version(
     family = "//antlir/antlir2/os/family:family[debian]",
     package_manager = "//antlir/antlir2/os/package_manager:package_manager[apt]",
 )
+
+os_version(
+    name = "wolfi",
+    family = "//antlir/antlir2/os/family:family[wolfi]",
+    package_manager = "//antlir/antlir2/os/package_manager:package_manager[apk]",
+)

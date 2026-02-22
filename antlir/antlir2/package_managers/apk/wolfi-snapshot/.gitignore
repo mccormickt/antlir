@@ -1,0 +1,5 @@
+/.cache
+
+# `.apk` blobs are not vendored — `wolfi_snapshot` fetches them at build
+# time via `download_file`. Only the minimal index and lock are committed.
+/x86_64/*.apk
