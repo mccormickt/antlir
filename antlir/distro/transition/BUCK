@@ -1,0 +1,13 @@
+load(":defs.bzl", "to_current_distro_platform")
+
+oncall("antlir")
+
+# OSS stub for the "to-current-distro-platform" transition. The Meta-internal
+# tree has a richer implementation that maps the current OS configuration to a
+# distro-specific platform. Here we use a no-op identity transition so features
+# that declare `distro_platform_deps` resolve in-place without requiring the
+# internal distro platform mapping.
+to_current_distro_platform(
+    name = "to-current-distro-platform",
+    visibility = ["PUBLIC"],
+)
