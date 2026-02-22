@@ -1,0 +1,17 @@
+load("//antlir/bzl:build_defs.bzl", "rust_binary")
+
+oncall("antlir")
+
+rust_binary(
+    name = "indexer",
+    srcs = ["indexer.rs"],
+    visibility = ["PUBLIC"],
+    deps = [
+        "anyhow",
+        "clap",
+        "tracing",
+        "tracing-subscriber",
+        "//antlir/antlir2/antlir2_isolate:antlir2_isolate",
+        "//antlir/antlir2/antlir2_rootless:antlir2_rootless",
+    ],
+)

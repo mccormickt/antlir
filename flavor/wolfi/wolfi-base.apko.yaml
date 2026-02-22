@@ -1,0 +1,27 @@
+# apko config for the Wolfi build appliance.
+#
+# apko resolves and downloads all packages hermetically from the Wolfi repo
+# and produces a reproducible rootfs tarball. No docker daemon required.
+contents:
+  repositories:
+    - https://packages.wolfi.dev/os
+  keyring:
+    - https://packages.wolfi.dev/os/wolfi-signing.rsa.pub
+  packages:
+    - wolfi-baselayout
+    - ca-certificates-bundle
+    - busybox
+    - apk-tools
+    # python3 is needed by the antlir2 apk feature driver (driver.py).
+    - python-3
+    # util-linux provides base utilities. Wolfi splits `mount`/`umount` into
+    # their own packages (mount, util-linux-misc) — the driver shells out to
+    # `mount --rbind` to set up /proc, /dev, /tmp in the install root.
+    - util-linux
+    - util-linux-misc
+    - mount
+
+archs:
+  - x86_64
+
+cmd: /bin/sh
