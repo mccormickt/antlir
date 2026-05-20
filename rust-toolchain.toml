@@ -1,0 +1,11 @@
+# antlir2 requires a nightly rustc (-Zcrate-attr, portable_simd, ...) but has
+# historically not pinned one, leaving builds to drift with whatever nightly
+# CI last ran.
+#
+# nightly-2025-08-01 is the most recent nightly verified to build the full
+# antlir2 graph. Later nightlies break the vendored third-party crates:
+# bytemuck-1.23.1 (`nightly_portable_simd` vs the reshaped core::simd API)
+# and hashbrown-0.15.4 (`min_specialization` no longer allows specializing
+# on `Copy`).
+[toolchain]
+channel = "nightly-2025-08-01"
