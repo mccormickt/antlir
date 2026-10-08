@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# Amp orb setup for the standalone Buck2 Melange/apko pipeline at
+# antlir/antlir2/package_managers/apk/standalone. Idempotent and
+# non-interactive: installs host prerequisites and DotSlash, then warms the
+# repo-root buck2 DotSlash shim. It does not build any Buck graph, install
+# Rust/Go, fetch package snapshots, or generate signing keys.
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+step() {
+  local name="$1"
+  shift
+  local start=$SECONDS
+  echo "==> ${name}"
+  "$@"
+  echo "<== ${name} ($((SECONDS - start))s)"
+}
+
+if [[ $EUID -eq 0 ]]; then
+  SUDO=()
+else
+  SUDO=(sudo -n)
+fi
+
+# --- System packages -------------------------------------------------------
+apt_packages=(bubblewrap openssl util-linux ca-certificates curl tar zstd python3)
+
+install_apt_packages() {
+  local missing=() pkg
+  for pkg in "${apt_packages[@]}"; do
+    if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q '^install ok installed$'; then
+      missing+=("$pkg")
+    fi
+  done
+  if ((${#missing[@]} == 0)); then
+    echo "all apt packages present"
+    return
+  fi
+  echo "installing: ${missing[*]}"
+  "${SUDO[@]}" env DEBIAN_FRONTEND=noninteractive apt-get update -q
+  "${SUDO[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends "${missing[@]}"
+}
+
+check_python() {
+  python3 - <<'EOF'
+import sys
+if sys.version_info < (3, 11):
+    sys.exit(f"python3 >= 3.11 required, found {sys.version.split()[0]}")
+print(f"python3 {sys.version.split()[0]} at {sys.executable}")
+EOF
+}
+
+# --- DotSlash (runs the repo-root buck2 shim) -------------------------------
+# Pinned from the official GitHub release asset digests for facebook/dotslash v0.5.9.
+dotslash_version="0.5.9"
+dotslash_bin="/usr/local/bin/dotslash"
+
+install_dotslash() {
+  if [[ -x "$dotslash_bin" ]] && "$dotslash_bin" --version 2>/dev/null | grep -qF "$dotslash_version"; then
+    echo "dotslash ${dotslash_version} already installed"
+    return
+  fi
+  local asset sha256
+  case "$(uname -m)" in
+    x86_64)
+      asset="dotslash-linux-musl.x86_64.v${dotslash_version}.tar.gz"
+      sha256="4c75c6eb7890ae35993b962073f6d9bbe78b42b81a5691303ad70f63bfbf7196"
+      ;;
+    aarch64 | arm64)
+      asset="dotslash-linux-musl.arm64.v${dotslash_version}.tar.gz"
+      sha256="e58374446dacd4a228388cd275d974bbd8f946916b513cf0eb86bdff5d9d675e"
+      ;;
+    *)
+      echo "unsupported architecture: $(uname -m)" >&2
+      return 1
+      ;;
+  esac
+  local tmp
+  tmp="$(mktemp -d)"
+  if ! (
+    curl -fsSL --retry 3 -o "$tmp/$asset" \
+      "https://github.com/facebook/dotslash/releases/download/v${dotslash_version}/${asset}" &&
+      echo "${sha256}  ${tmp}/${asset}" | sha256sum -c - &&
+      tar -xzf "$tmp/$asset" -C "$tmp" dotslash &&
+      "${SUDO[@]}" install -m 0755 "$tmp/dotslash" "$dotslash_bin"
+  ); then
+    rm -rf "$tmp"
+    return 1
+  fi
+  rm -rf "$tmp"
+  "$dotslash_bin" --version
+}
+
+# --- Host capability checks -------------------------------------------------
+check_namespaces() {
+  if unshare --user --map-root-user --net true 2>/dev/null; then
+    echo "user/network namespaces available"
+  else
+    echo "WARNING: unprivileged user/network namespaces unavailable; bubblewrap sandboxing may fail" >&2
+  fi
+}
+
+warm_buck2() {
+  # Downloads/caches the pinned buck2 binary only; does not start a daemon
+  # or evaluate any build graph.
+  "$repo_root/buck2" --version
+}
+
+step "apt packages" install_apt_packages
+step "python3 version" check_python
+step "dotslash" install_dotslash
+step "namespace check" check_namespaces
+step "warm buck2" warm_buck2
+echo "setup complete"
