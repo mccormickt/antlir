@@ -175,22 +175,30 @@ def sandbox(spec_path, output):
             ("source", "/source"),
             ("apko", "/tools/apko"),
             ("melange", "/tools/melange"),
-            ("driver", "/driver.py"),
+            ("driver", "/build.py"),
             ("signing_key", "/signing-key"),
+            ("base", "/base"),
+            ("regctl", "/tools/regctl"),
+            ("oci_driver", "/oci.py"),
         ]:
             if spec.get(key):
                 command += ["--ro-bind", str(Path(spec[key]).resolve()), destination]
                 spec[key] = destination
-        for i, repo in enumerate(spec["repositories"]):
+        for i, repo in enumerate(spec.get("repositories", [])):
             destination = f"/repos/{i}"
             command += ["--ro-bind", str(Path(repo).resolve()), destination]
             spec["repositories"][i] = destination
         (work / "spec.json").write_text(json.dumps(spec))
-        run(*command, "/usr/bin/python3", "/driver.py", "action", "/build/spec.json")
+        run(*command, "/usr/bin/python3", "/build.py", "action", "/build/spec.json")
         shutil.copytree(work / "output", output)
 
 
 def action(spec):
+    if spec["kind"] == "oci":
+        from oci import compose
+
+        compose(spec)
+        return
     repositories, keys = repository_inputs(spec["repositories"], spec["arch"])
     flags = []
     for repo in repositories:

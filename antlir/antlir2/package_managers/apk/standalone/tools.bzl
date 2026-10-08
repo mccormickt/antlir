@@ -14,6 +14,19 @@ _TOOLS = {
 }
 
 def apk_tools():
+    native.http_file(
+        name = "regctl",
+        urls = select({
+            "prelude//cpu:x86_64": ["https://github.com/regclient/regclient/releases/download/v0.11.2/regctl-linux-amd64"],
+            "prelude//cpu:arm64": ["https://github.com/regclient/regclient/releases/download/v0.11.2/regctl-linux-arm64"],
+        }),
+        sha256 = select({
+            "prelude//cpu:x86_64": "d79774ee6d3873ba59119b3d4cc9dba850485fbf54a03a17f66fc836bbbe2785",
+            "prelude//cpu:arm64": "71b8deb028d174a20c134c76c77e054e8792f32c834beea4b4da36b56b2f3513",
+        }),
+        executable = True,
+        visibility = ["PUBLIC"],
+    )
     for tool, (version, amd64_sha, arm64_sha) in _TOOLS.items():
         native.http_archive(
             name = tool + "-archive",

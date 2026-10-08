@@ -1,8 +1,10 @@
-# Buck2 → Melange → APK → apko
+# Buck2 APK packages and OCI images
 
 This standalone Buck project builds signed APK packages and OCI images without
 loading Antlir's Rust build graph. It is a working path for package and image
 development, not a replacement for Antlir layers, VM appliances, or RPM support.
+Define image composition in Starlark, or supply an apko config. Use Melange
+only when the application must be distributed as an APK package.
 
 ```
 Online snapshot export                    Offline Buck actions
@@ -43,7 +45,7 @@ python3 snapshot.py \
   --output examples/state.local/snapshot
 
 "$BUCK2" build //examples:image --show-full-output
-python3 -m unittest -v test_build
+python3 -m unittest -v test_build test_oci
 python3 verify.py
 ```
 
@@ -63,6 +65,80 @@ builds, and compares all output file hashes. It then runs the binary from the
 OCI filesystem, checks the subpackage, lock and SBOM, and tests rejection of
 an incorrect key, a changed payload, an unavailable version, host network
 access, and a source omitted from declared inputs.
+
+## Build an image with Starlark
+
+`apk_image` can select packages and runtime settings without a handwritten
+apko config. `oci_image` adds files from Buck targets or source files. This path
+does not run Melange or require a private signing key. It still requires a
+reviewed binary package snapshot and its public verification keys.
+
+After preparing the snapshot above, run:
+
+```sh
+"$BUCK2" build //examples:app-with-args --show-full-output
+```
+
+For this path alone, export a snapshot with only `wolfi-baselayout` and `busybox`
+as root packages; omit `gcc`, `glibc-dev`, and the private-key command. The full
+acceptance suite still needs the package-building example and its signing key.
+
+The graph has this structure (see `examples/BUCK` for the executable example):
+
+```python
+load("//:rules.bzl", "apk_image", "oci_image")
+
+apk_image(
+    name = "base",
+    packages = ["wolfi-baselayout", "busybox"],
+    repositories = [":wolfi"],
+    arch = "x86_64",
+    user = "1000",
+    workdir = "/tmp",
+)
+
+oci_image(
+    name = "app-image",
+    base = ":base",
+    files = {"/usr/bin/app": ":app"},
+    entrypoint = ["/usr/bin/app"],
+    cmd = ["argument with spaces"],
+    environment = {"GREETING": "from Starlark"},
+)
+```
+
+`:app` must produce a regular file. The example uses a Buck genrule to produce
+an executable shell script. A compiled application must match the base image's
+architecture and runtime libraries; these rules do not configure a compiler or
+check ABI compatibility. Application files do not have to be packaged as APKs.
+
+- `apk_image` requires either `config` or `packages`. Do not combine `config`
+  with structured image attributes. `entrypoint` and `cmd` are argv lists,
+  `environment` is a string map, and `user` and `workdir` are strings.
+- `oci_image.base` accepts an `apk_image` or another `oci_image`. It inherits
+  architecture, user, and working directory. Set user and working directory on
+  the base; the pinned composition tool does not provide these overrides.
+- Omitted entrypoint and command values inherit from the base. An explicit
+  `[]` clears the value. A new entrypoint clears an inherited command unless
+  `cmd` is also supplied, so the new executable does not receive stale arguments.
+- Environment values merge with the base. Names must be shell-style identifiers.
+  `oci_image` rejects empty values because the composition tool treats them as
+  deletions; set empty values on `apk_image` and inherit them instead.
+- File destinations must be canonical absolute paths, with no `.` or `..`
+  components, whiteout names, or file-parent conflicts. Only regular files are
+  supported, not directory trees, ownership overrides, or deletion operations.
+  Files use uid/gid zero and mode 0755 for executable inputs, otherwise 0644.
+  `file_modes` overrides permissions with an integer from 0 through 511 (0777).
+- Added files use sorted paths and `source_date_epoch` (default zero), not host
+  timestamps. Composition preserves the base layers and normalizes new history.
+  Config-only composition does not add a filesystem layer.
+
+`oci_image` emits `oci/` and `composition.json`, which records the base manifest
+digest, added-file hashes and modes, and requested runtime overrides. It does
+**not** emit a final-image SBOM: the SBOM on the base target covers only the base.
+The rules currently support one Linux platform per image. The acceptance suite
+checks file metadata, literal arguments, execution as UID 1000, inheritance,
+explicit clears, unchanged base content, and two uncached composition builds.
 
 ## Retain the package world
 
@@ -106,10 +182,11 @@ not as a portable reference to the original online repository.
 
 ## Declare recipes and images
 
-Load `apk_snapshot`, `apk_recipe`, and `apk_image` from `//:rules.bzl`.
-`examples/BUCK` contains a complete graph. A recipe or image declares its config,
-architecture, repositories, optional named `srcs`, and `source_date_epoch`.
-Recipes also declare a development signing key.
+Load the rules from `//:rules.bzl`. `examples/BUCK` contains both complete graphs.
+A recipe or package-based image declares its architecture, repositories,
+optional named `srcs`, and `source_date_epoch`. Recipes also declare a Melange
+config and development signing key. Images can use the structured attributes
+above or an apko config for settings not exposed by those attributes.
 
 Configurations are staged as `/source/config.yaml`. Declare all included config
 files, source trees, patches, and shared pipeline directories in `srcs`, using
