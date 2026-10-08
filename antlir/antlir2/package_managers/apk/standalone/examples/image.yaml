@@ -1,0 +1,7 @@
+contents:
+  packages:
+    - wolfi-baselayout
+    - antlir-hello=1.0.0-r0
+    - antlir-hello-doc=1.0.0-r0
+entrypoint:
+  command: /usr/bin/antlir-hello

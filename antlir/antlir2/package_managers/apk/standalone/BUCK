@@ -1,0 +1,20 @@
+load("@prelude//platforms:defs.bzl", "execution_platform", "host_configuration")
+load(":tools.bzl", "apk_tools")
+
+execution_platform(
+    name = "host",
+    cpu_configuration = host_configuration.cpu,
+    os_configuration = host_configuration.os,
+    use_windows_path_separators = False,
+    visibility = ["PUBLIC"],
+)
+
+apk_tools()
+
+python_bootstrap_binary(
+    name = "builder",
+    main = "build.py",
+    visibility = ["PUBLIC"],
+)
+
+export_file(name = "build.py", visibility = ["PUBLIC"])

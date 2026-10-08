@@ -1,0 +1,25 @@
+load("//:rules.bzl", "apk_image", "apk_recipe", "apk_snapshot")
+
+arch = read_config("apk", "arch", "x86_64")
+
+apk_snapshot(
+    name = "wolfi",
+    directory = "state.local/snapshot",
+    arch = arch,
+)
+
+apk_recipe(
+    name = "hello",
+    config = "hello.yaml",
+    srcs = {"hello.c": "hello.c", "pipelines": "pipelines"},
+    repositories = [":wolfi"],
+    signing_key = "state.local/test.rsa",
+    arch = arch,
+)
+
+apk_image(
+    name = "image",
+    config = "image.yaml",
+    repositories = [":wolfi", ":hello"],
+    arch = arch,
+)
