@@ -1,0 +1,26 @@
+package:
+  name: antlir-hello
+  version: 1.0.0
+  epoch: 0
+  description: Offline Buck2 package fixture
+  copyright:
+    - license: MIT
+
+environment:
+  contents:
+    packages:
+      - wolfi-baselayout
+      - busybox
+      - gcc
+      - glibc-dev
+
+pipeline:
+  - uses: compile-hello
+
+subpackages:
+  - name: antlir-hello-doc
+    description: Documentation for the offline fixture
+    pipeline:
+      - runs: |
+          mkdir -p "${{targets.contextdir}}/usr/share/doc/antlir-hello"
+          printf '%s\n' 'Built without network access.' > "${{targets.contextdir}}/usr/share/doc/antlir-hello/README"
