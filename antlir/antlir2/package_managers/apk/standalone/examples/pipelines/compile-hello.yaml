@@ -1,0 +1,5 @@
+name: Compile the declared C source
+pipeline:
+  - runs: |
+      mkdir -p "${{targets.destdir}}/usr/bin"
+      gcc -O2 -o "${{targets.destdir}}/usr/bin/antlir-hello" hello.c
