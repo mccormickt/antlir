@@ -1,4 +1,4 @@
-load("//:rules.bzl", "apk_image", "apk_recipe", "apk_snapshot")
+load("//:rules.bzl", "apk_image", "apk_recipe", "apk_snapshot", "oci_image")
 
 arch = read_config("apk", "arch", "x86_64")
 
@@ -22,4 +22,38 @@ apk_image(
     config = "image.yaml",
     repositories = [":wolfi", ":hello"],
     arch = arch,
+)
+
+apk_image(
+    name = "base",
+    packages = ["wolfi-baselayout", "busybox"],
+    repositories = [":wolfi"],
+    entrypoint = ["/bin/busybox"],
+    cmd = ["echo", "base argument with spaces", "it's literal", "", "quote\"slash\\"],
+    environment = {"GREETING": "from base", "KEEP": "unchanged", "EMPTY": ""},
+    user = "1000",
+    workdir = "/tmp",
+    arch = arch,
+)
+
+genrule(
+    name = "app",
+    srcs = ["app.sh"],
+    out = "app",
+    cmd = "cp $SRCS $OUT && chmod +x $OUT",
+)
+
+oci_image(
+    name = "app-image",
+    base = ":base",
+    files = {"/usr/bin/app": ":app", "/etc/app-source.txt": "hello.c"},
+    file_modes = {"/etc/app-source.txt": 416},  # 0640
+    entrypoint = ["/usr/bin/app"],
+    environment = {"GREETING": "from Starlark"},
+)
+
+oci_image(
+    name = "app-with-args",
+    base = ":app-image",
+    cmd = ["argument with spaces", "it's literal"],
 )
