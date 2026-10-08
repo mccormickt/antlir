@@ -32,7 +32,7 @@ APKO="$($BUCK2 build //:apko --show-full-json-output | python3 -c \
   'import json,sys; print(next(iter(json.load(sys.stdin).values())))')"
 mkdir -p examples/state.local
 test -f examples/state.local/test.rsa || \
-  (umask 077; openssl genrsa -out examples/state.local/test.rsa 2048)
+  (umask 077; openssl genrsa -traditional -out examples/state.local/test.rsa 2048)
 
 python3 snapshot.py \
   --apko "$APKO" --arch x86_64 \
